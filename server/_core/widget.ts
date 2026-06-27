@@ -38,6 +38,7 @@ const WIDGET_JS = `(function(){
   var color, side, dark, panelW, bg, fg, sub, border;
 
   var storeKey = "chatbotpro_conv_" + agentId;
+  var leadStoreKey = "chatbotpro_lead_" + agentId;
   var conversationId = null;
   try { conversationId = localStorage.getItem(storeKey); } catch (e) {}
 
@@ -52,7 +53,12 @@ const WIDGET_JS = `(function(){
   // show the lead form.
   var configLoaded = false;
   var leadRequired = false;
-  var leadDone = !!conversationId; // returning visitors already provided details
+  // A lead is only "done" once the visitor actually SUBMITTED the form. We track
+  // that with its own localStorage flag — NOT the presence of a conversation id,
+  // because a conversation may already exist from before lead capture was turned
+  // on (which would otherwise wrongly skip the form for returning testers).
+  var leadDone = false;
+  try { leadDone = localStorage.getItem(leadStoreKey) === "1"; } catch (e) {}
   var leadForm = null;
 
   // Launcher icon presets. The default "chat" icon is available on every plan;
@@ -187,6 +193,9 @@ const WIDGET_JS = `(function(){
 
   // Paint once with the config fallbacks so the launcher shows immediately.
   applySettings();
+  // Keep the message input hidden until the open flow runs, so a visitor can't
+  // start chatting before we know whether a lead form must be shown first.
+  foot.style.display = "none";
 
   function addMsg(role, text){
     var d = document.createElement("div");
@@ -210,6 +219,7 @@ const WIDGET_JS = `(function(){
   function openFlow(){
     if (!open || !configLoaded) return;
     if (leadRequired && !leadDone){ showLeadForm(); return; }
+    foot.style.display = "flex"; // lead not required (or already captured) — allow chatting
     if (!greeted){ greeted = true; addMsg("bot", welcome); input.focus(); }
   }
 
@@ -260,6 +270,7 @@ const WIDGET_JS = `(function(){
         if (d && d.conversationId){ conversationId = String(d.conversationId); try { localStorage.setItem(storeKey, conversationId); } catch(e){} }
       }).catch(function(){}).then(function(){
         leadDone = true;
+        try { localStorage.setItem(leadStoreKey, "1"); } catch(e){}
         if (leadForm && leadForm.parentNode){ leadForm.parentNode.removeChild(leadForm); }
         leadForm = null;
         foot.style.display = "flex";
