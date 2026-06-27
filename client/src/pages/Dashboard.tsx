@@ -16,6 +16,7 @@ import {
   BarChart3,
 } from "lucide-react";
 import { Link } from "wouter";
+import LiveSearch from "@/components/LiveSearch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -83,6 +84,9 @@ export default function Dashboard() {
           </Button>
         </Link>
       </div>
+
+      {/* Live search */}
+      <LiveSearch />
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
