@@ -4,7 +4,7 @@ import { customAlphabet } from "nanoid";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { invokeLLM, type Message as LLMMessage } from "./_core/llm";
 import { ENV } from "./_core/env";
 import {
@@ -950,6 +950,22 @@ const affiliateRouter = router({
   }),
 });
 
+// ─── Admin Router (platform super-admin; role === "admin") ────────────────────
+const adminRouter = router({
+  stats: adminProcedure.query(async () => db.getPlatformStats()),
+  users: adminProcedure.query(async () => db.getAllUsers()),
+  workspaces: adminProcedure.query(async () => db.getAllWorkspaces()),
+  setUserRole: adminProcedure
+    .input(z.object({ id: z.number(), role: z.enum(["user", "admin"]) }))
+    .mutation(async ({ input }) => db.updateUserRole(input.id, input.role)),
+  setWorkspacePlan: adminProcedure
+    .input(z.object({ id: z.number(), plan: z.string() }))
+    .mutation(async ({ input }) => {
+      await db.updateWorkspace(input.id, { plan: input.plan });
+      return { success: true };
+    }),
+});
+
 // ─── App Router ───────────────────────────────────────────────────────────────
 export const appRouter = router({
   system: systemRouter,
@@ -976,6 +992,7 @@ export const appRouter = router({
   playground: playgroundRouter,
   upload: uploadRouter,
   affiliate: affiliateRouter,
+  admin: adminRouter,
 });
 
 export type AppRouter = typeof appRouter;

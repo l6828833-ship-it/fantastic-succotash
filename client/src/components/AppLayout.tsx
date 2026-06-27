@@ -19,6 +19,7 @@ import {
   MessageSquare,
   Moon,
   Settings,
+  Shield,
   Sun,
   Ticket,
   Users,
@@ -220,6 +221,20 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
 
         <div className="space-y-1">
           <NotificationBell />
+          {user?.role === "admin" && (
+            <Link
+              href="/admin"
+              className={cn(
+                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
+                currentPath === "/admin"
+                  ? "bg-sidebar-accent text-sidebar-foreground font-semibold"
+                  : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+              )}
+            >
+              <Shield className="w-4 h-4" />
+              <span>Admin</span>
+            </Link>
+          )}
           <Link
             href="/settings"
             className={cn(
