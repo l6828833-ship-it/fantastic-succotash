@@ -60,7 +60,7 @@ const WIDGET_JS = `(function(){
     + ".cbp-user{align-self:flex-end;color:#fff;border-bottom-right-radius:4px;}"
     + ".cbp-foot{border-top:1px solid " + border + ";padding:10px;display:flex;gap:8px;background:" + bg + ";}"
     + ".cbp-foot input{flex:1;border:1px solid " + border + ";background:" + bg + ";color:" + fg + ";border-radius:10px;padding:10px 12px;font-size:14px;outline:none;}"
-    + ".cbp-foot button{border:none;border-radius:10px;color:#fff;width:40px;cursor:pointer;display:flex;align-items:center;justify-content:center;}"
+    + ".cbp-foot button{border:none;border-radius:50%;color:#fff;width:42px;height:42px;flex:0 0 auto;cursor:pointer;display:flex;align-items:center;justify-content:center;}"
     + ".cbp-foot button:disabled{opacity:.5;cursor:default;}"
     + ".cbp-foot button svg{width:18px;height:18px;fill:#fff;}"
     + ".cbp-typing{display:flex;gap:4px;padding:4px 2px;}"
@@ -108,7 +108,7 @@ const WIDGET_JS = `(function(){
   input.placeholder = "Type a message...";
   var sendBtn = document.createElement("button");
   sendBtn.style.background = color;
-  sendBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>';
+  sendBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3.4 20.4l17.45-7.48a1 1 0 0 0 0-1.84L3.4 3.6a.993.993 0 0 0-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .65.65 1.1 1.39.91z"/></svg>';
   foot.appendChild(input);
   foot.appendChild(sendBtn);
 
