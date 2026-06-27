@@ -91,6 +91,23 @@ export function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
+// A simple branded HTML wrapper used for transactional emails (ticket
+// confirmations, etc.). Brand name comes from EMAIL_FROM_NAME.
+export function brandedEmail(opts: { title: string; bodyHtml: string }): string {
+  const brand = escapeHtml(ENV.emailFromName || "ChatBot Pro");
+  return [
+    '<div style="background:#f4f4f7;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;">',
+    '<div style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">',
+    `<div style="background:#6366f1;color:#fff;padding:16px 24px;font-weight:700;font-size:16px;">${brand}</div>`,
+    '<div style="padding:24px;color:#111827;font-size:15px;line-height:1.6;">',
+    `<h2 style="margin:0 0 12px;font-size:18px;">${escapeHtml(opts.title)}</h2>`,
+    opts.bodyHtml,
+    '</div>',
+    `<div style="padding:14px 24px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:12px;">Sent by ${brand}</div>`,
+    '</div></div>',
+  ].join("");
+}
+
 // Replace {{name}} / {{email}} tokens (case-insensitive) in a template.
 export function personalize(template: string, vars: { name?: string | null; email?: string | null }): string {
   return template

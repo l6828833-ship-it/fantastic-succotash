@@ -103,6 +103,7 @@ const agentRouter = router({
       widgetSize: z.enum(["compact", "standard", "large"]).optional(),
       widgetTheme: z.enum(["light", "dark"]).optional(),
       widgetFont: z.string().optional(),
+      ticketMode: z.enum(["off", "always", "ai_fallback"]).optional(),
       launcherIconUrl: z.string().optional().nullable(),
       brandLogoUrl: z.string().optional().nullable(),
       customCss: z.string().optional().nullable(),
@@ -312,6 +313,19 @@ const inboxRouter = router({
             relatedId: id,
             relatedType: "conversation",
           });
+          // Auto-convert the escalated conversation into a ticket so nothing is
+          // lost, unless one already exists for it.
+          const existingTicket = await db.getTicketByConversation(id);
+          if (!existingTicket) {
+            await db.createTicket({
+              workspaceId: workspace.id,
+              conversationId: id,
+              title: `Escalated: ${conv?.visitorName ?? conv?.visitorEmail ?? `conversation #${id}`}`,
+              description: "This conversation was escalated to a human agent.",
+              status: "open",
+              priority: "high",
+            });
+          }
         }
       }
       return conv;

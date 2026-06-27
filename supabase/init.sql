@@ -245,6 +245,7 @@ CREATE TABLE IF NOT EXISTS "team_members" (
 
 -- Migrations for existing databases (safe to run repeatedly).
 ALTER TABLE "tickets" ADD COLUMN IF NOT EXISTS "contactId" integer;
+ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "ticketMode" text DEFAULT 'off';
 ALTER TABLE "campaigns" ADD COLUMN IF NOT EXISTS "subject" varchar(512);
 
 CREATE TABLE IF NOT EXISTS "affiliates" (

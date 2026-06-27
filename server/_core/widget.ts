@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { invokeLLM, type Message as LLMMessage } from "./llm";
+import { createCustomerTicket } from "./ticketing";
 
 // The embeddable widget runs on third-party websites, so these routes must be
 // public (no auth) and CORS-enabled.
@@ -69,6 +70,13 @@ const WIDGET_JS = `(function(){
   try { leadDone = localStorage.getItem(leadStoreKey) === "1"; } catch (e) {}
   var leadForm = null;
 
+  // Ticket capture: "off" | "always" | "ai_fallback". The header ticket button
+  // appears from the start in "always", and after the AI can't help in
+  // "ai_fallback".
+  var ticketMode = (cfg.ticketMode === "always" || cfg.ticketMode === "ai_fallback") ? cfg.ticketMode : "off";
+  var ticketForm = null;
+  var ticketOffered = false;
+
   // Launcher icon presets. The default "chat" icon is available on every plan;
   // the rest are premium and require a paid plan. Values are filled SVGs (the
   // launcher CSS paints them white).
@@ -131,7 +139,11 @@ const WIDGET_JS = `(function(){
       + ".cbp-lead input{width:100%;box-sizing:border-box;border:1px solid " + border + ";background:" + bg + ";color:" + fg + ";border-radius:10px;padding:10px 12px;font-size:14px;outline:none;}"
       + ".cbp-lead .cbp-start{border:none;border-radius:10px;color:#fff;padding:11px;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;}"
       + ".cbp-lead .cbp-start:disabled{opacity:.6;cursor:default;}"
-      + ".cbp-lead .cbp-err{color:#ef4444;font-size:12px;min-height:14px;}";
+      + ".cbp-lead .cbp-err{color:#ef4444;font-size:12px;min-height:14px;}"
+      + ".cbp-head .cbp-ticket{margin-left:auto;background:none;border:none;color:#fff;cursor:pointer;opacity:.85;display:flex;align-items:center;padding:0;}"
+      + ".cbp-head .cbp-ticket:hover{opacity:1;}"
+      + ".cbp-head .cbp-ticket svg{width:18px;height:18px;fill:#fff;}"
+      + ".cbp-lead textarea{width:100%;box-sizing:border-box;border:1px solid " + border + ";background:" + bg + ";color:" + fg + ";border-radius:10px;padding:10px 12px;font-size:14px;outline:none;resize:vertical;min-height:84px;font-family:inherit;}";
   }
 
   // Recompute every visual value from the current settings and repaint. Safe to
@@ -178,8 +190,15 @@ const WIDGET_JS = `(function(){
   var closeBtn = document.createElement("button");
   closeBtn.className = "cbp-x";
   closeBtn.innerHTML = "&times;";
+  var ticketBtn = document.createElement("button");
+  ticketBtn.className = "cbp-ticket";
+  ticketBtn.setAttribute("title", "Open a ticket");
+  ticketBtn.style.display = "none";
+  ticketBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M20 4H4a2 2 0 0 0-2 2v3a2 2 0 0 1 0 4v3a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-3a2 2 0 0 1 0-4V6a2 2 0 0 0-2-2zm-9 13H7v-2h4v2zm0-4H7v-2h4v2z"/></svg>';
+  closeBtn.style.marginLeft = "4px";
   head.appendChild(avatar);
   head.appendChild(nameEl);
+  head.appendChild(ticketBtn);
   head.appendChild(closeBtn);
 
   var body = document.createElement("div");
@@ -332,6 +351,50 @@ const WIDGET_JS = `(function(){
     leadName.focus();
   }
 
+  function showTicketForm(){
+    if (ticketForm) return;
+    foot.style.display = "none";
+    ticketForm = document.createElement("div");
+    ticketForm.className = "cbp-lead";
+    var title = document.createElement("h4"); title.textContent = "Open a support ticket";
+    var desc = document.createElement("p"); desc.textContent = "Tell us what you need and we'll get back to you by email.";
+    function field(labelText, el){ var w = document.createElement("div"); var l = document.createElement("label"); l.textContent = labelText; w.appendChild(l); w.appendChild(el); return w; }
+    var nm = document.createElement("input"); nm.type = "text"; nm.placeholder = "Your name";
+    var em = document.createElement("input"); em.type = "email"; em.placeholder = "you@example.com";
+    var subj = document.createElement("input"); subj.type = "text"; subj.placeholder = "Subject";
+    var msg = document.createElement("textarea"); msg.placeholder = "Describe your issue...";
+    var err = document.createElement("div"); err.className = "cbp-err";
+    var submit = document.createElement("button"); submit.className = "cbp-start"; submit.style.background = color; submit.textContent = "Submit ticket";
+    var cancel = document.createElement("button");
+    cancel.textContent = "Cancel";
+    cancel.style.cssText = "background:none;border:none;color:" + (dark ? "#9ca3af" : "#6b7280") + ";font-size:13px;cursor:pointer;";
+
+    function close(){ if (ticketForm && ticketForm.parentNode) ticketForm.parentNode.removeChild(ticketForm); ticketForm = null; foot.style.display = "flex"; }
+    cancel.addEventListener("click", close);
+    submit.addEventListener("click", function(){
+      var s = (subj.value || "").trim();
+      var m = (msg.value || "").trim();
+      var e = (em.value || "").trim();
+      if (!s || !m){ err.textContent = "Please add a subject and a message."; return; }
+      if (e && !/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(e)){ err.textContent = "Please enter a valid email."; return; }
+      err.textContent = ""; submit.disabled = true; submit.textContent = "Submitting...";
+      fetch(apiBase + "/widget/ticket", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: agentId, conversationId: conversationId, name: (nm.value || "").trim(), email: e, subject: s, message: m })
+      }).then(function(r){ return r.json(); }).then(function(d){
+        if (d && d.ok){ close(); addMsg("bot", "Thanks! Your ticket has been created" + (e ? " — we'll reply to " + e : "") + "."); }
+        else { err.textContent = (d && d.error) ? d.error : "Could not create your ticket."; submit.disabled = false; submit.textContent = "Submit ticket"; }
+      }).catch(function(){ err.textContent = "Could not reach the server."; submit.disabled = false; submit.textContent = "Submit ticket"; });
+    });
+
+    ticketForm.appendChild(title); ticketForm.appendChild(desc);
+    ticketForm.appendChild(field("Name", nm)); ticketForm.appendChild(field("Email", em));
+    ticketForm.appendChild(field("Subject", subj)); ticketForm.appendChild(field("Message", msg));
+    ticketForm.appendChild(err); ticketForm.appendChild(submit); ticketForm.appendChild(cancel);
+    body.appendChild(ticketForm);
+    subj.focus();
+  }
+
   function toggle(){
     open = !open;
     panel.className = "cbp-panel" + (open ? " cbp-open" : "");
@@ -361,6 +424,12 @@ const WIDGET_JS = `(function(){
         if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", "You're connected to our team — someone will reply right here shortly."); }
       } else if (data && data.reply){
         addMsg("bot", data.reply);
+        // In ai_fallback mode, offer a ticket once the AI couldn't answer.
+        if (ticketMode === "ai_fallback" && data.fallback && !ticketOffered){
+          ticketOffered = true;
+          ticketBtn.style.display = "flex";
+          addMsg("bot", "I couldn't fully answer that. You can open a support ticket and our team will follow up.");
+        }
       } else {
         addMsg("bot", "Sorry, something went wrong. Please try again.");
       }
@@ -373,6 +442,7 @@ const WIDGET_JS = `(function(){
 
   launcher.addEventListener("click", toggle);
   closeBtn.addEventListener("click", toggle);
+  ticketBtn.addEventListener("click", showTicketForm);
   sendBtn.addEventListener("click", send);
   input.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); send(); } });
 
@@ -392,6 +462,8 @@ const WIDGET_JS = `(function(){
     // Launcher icon (preset id or uploaded URL), gated by the workspace plan.
     launcher.innerHTML = launcherMarkup(a.launcherIcon, a.plan);
     leadRequired = !!a.leadCapture;
+    if (a.ticketMode === "always" || a.ticketMode === "ai_fallback") ticketMode = a.ticketMode;
+    if (ticketMode === "always") ticketBtn.style.display = "flex";
   }).catch(function(){}).then(function(){
     // Always mark config resolved so the open flow can proceed (greet or lead).
     configLoaded = true;
@@ -435,6 +507,7 @@ export function registerWidgetRoutes(app: Express) {
         launcherIcon: agent.launcherIconUrl ?? "chat",
         leadCapture: agent.leadCaptureEnabled ?? false,
         leadFields: (agent.leadCaptureFields && agent.leadCaptureFields.length > 0) ? agent.leadCaptureFields : ["name", "email"],
+        ticketMode: agent.ticketMode ?? "off",
         plan: workspace?.plan ?? "starter",
         isActive: agent.isActive ?? true,
       });
@@ -524,6 +597,45 @@ export function registerWidgetRoutes(app: Express) {
   app.options("/api/widget/chat", (_req: Request, res: Response) => {
     setCors(res);
     res.sendStatus(204);
+  });
+
+  app.options("/api/widget/ticket", (_req: Request, res: Response) => {
+    setCors(res);
+    res.sendStatus(204);
+  });
+
+  // Public endpoint: a visitor opens a support ticket from the widget.
+  app.post("/api/widget/ticket", async (req: Request, res: Response) => {
+    setCors(res);
+    try {
+      const body = (req.body ?? {}) as { agentId?: string | number; conversationId?: string | number; name?: string; email?: string; subject?: string; message?: string };
+      const agentId = Number(body.agentId);
+      const subject = String(body.subject ?? "").trim();
+      const message = String(body.message ?? "").trim();
+      const email = String(body.email ?? "").trim();
+      if (!agentId || !subject || !message) {
+        res.status(400).json({ error: "Subject and message are required." });
+        return;
+      }
+      const agent = await db.getAgentById(agentId);
+      if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+      if ((agent.ticketMode ?? "off") === "off") { res.status(403).json({ error: "Ticketing is not enabled for this agent." }); return; }
+
+      const result = await createCustomerTicket({
+        workspaceId: agent.workspaceId,
+        subject,
+        message,
+        name: String(body.name ?? "").trim() || null,
+        email: email || null,
+        conversationId: body.conversationId ? Number(body.conversationId) : null,
+        channel: "web",
+        sendConfirmation: true,
+      });
+      res.json({ ok: true, ticketId: result.ticketId });
+    } catch (error) {
+      console.error("[Widget] ticket create failed", error);
+      res.status(500).json({ error: "Could not create your ticket. Please try again." });
+    }
   });
 
   app.options("/api/widget/messages", (_req: Request, res: Response) => {
@@ -645,13 +757,14 @@ export function registerWidgetRoutes(app: Express) {
       ];
 
       const response = await invokeLLM({ model: "gpt-4o-mini", messages: llmMessages });
-      const reply = response.choices?.[0]?.message?.content
-        ? String(response.choices[0].message.content)
-        : (agent.fallbackMessage ?? "I'm sorry, I couldn't process that right now.");
+      const llmContent = response.choices?.[0]?.message?.content ? String(response.choices[0].message.content) : "";
+      const reply = llmContent || (agent.fallbackMessage ?? "I'm sorry, I couldn't process that right now.");
 
       const agentMsg = await db.createMessage({ conversationId, role: "agent", content: reply });
 
-      res.json({ reply, conversationId, mode: "ai", userMessageId, messageId: agentMsg?.id ?? null });
+      // `fallback` lets the widget offer a ticket in ai_fallback mode when the AI
+      // couldn't answer from its knowledge.
+      res.json({ reply, conversationId, mode: "ai", userMessageId, messageId: agentMsg?.id ?? null, fallback: !llmContent });
     } catch (error) {
       console.error("[Widget] chat failed", error);
       // Degrade gracefully so the visitor still sees a reply.
