@@ -1,0 +1,577 @@
+import { TRPCError } from "@trpc/server";
+import { z } from "zod";
+import { COOKIE_NAME } from "@shared/const";
+import { getSessionCookieOptions } from "./_core/cookies";
+import { systemRouter } from "./_core/systemRouter";
+import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { invokeLLM, type Message as LLMMessage } from "./_core/llm";
+import { storagePut } from "./storage";
+import * as db from "./db";
+
+// ─── Workspace Router ─────────────────────────────────────────────────────────
+const workspaceRouter = router({
+  get: protectedProcedure.query(async ({ ctx }) => {
+    let workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) {
+      await db.createWorkspace({ userId: ctx.user.id });
+      workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    }
+    return workspace;
+  }),
+  update: protectedProcedure
+    .input(z.object({
+      companyName: z.string().optional(),
+      companyWebsite: z.string().optional(),
+      industry: z.string().optional(),
+      companySize: z.string().optional(),
+      features: z.array(z.string()).optional(),
+      plan: z.string().optional(),
+      onboardingCompleted: z.boolean().optional(),
+      onboardingStep: z.number().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      let workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) {
+        await db.createWorkspace({ userId: ctx.user.id });
+        workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      }
+      await db.updateWorkspace(workspace!.id, input);
+      return db.getWorkspaceByUserId(ctx.user.id);
+    }),
+});
+
+// ─── Agent Router ─────────────────────────────────────────────────────────────
+const agentRouter = router({
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) return [];
+    return db.getAgentsByWorkspace(workspace.id);
+  }),
+  get: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ ctx, input }) => {
+    const agent = await db.getAgentById(input.id);
+    if (!agent) throw new TRPCError({ code: "NOT_FOUND" });
+    return agent;
+  }),
+  create: protectedProcedure
+    .input(z.object({
+      name: z.string().min(1),
+      tone: z.enum(["formal", "friendly", "professional", "casual", "empathetic"]).optional(),
+      language: z.string().optional(),
+      responseStyle: z.enum(["conservative", "balanced", "creative"]).optional(),
+      handoffMode: z.enum(["ai_only", "ai_first_human_escalation", "human_only"]).optional(),
+      welcomeMessage: z.string().optional(),
+      systemPrompt: z.string().optional(),
+      fallbackMessage: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) throw new TRPCError({ code: "BAD_REQUEST", message: "No workspace found" });
+      return db.createAgent({ ...input, workspaceId: workspace.id });
+    }),
+  update: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      name: z.string().optional(),
+      avatarUrl: z.string().optional().nullable(),
+      tone: z.enum(["formal", "friendly", "professional", "casual", "empathetic"]).optional(),
+      language: z.string().optional(),
+      responseStyle: z.enum(["conservative", "balanced", "creative"]).optional(),
+      maxResponseLength: z.enum(["short", "medium", "long"]).optional(),
+      typingDelay: z.number().optional(),
+      systemPrompt: z.string().optional().nullable(),
+      fallbackMessage: z.string().optional().nullable(),
+      welcomeMessage: z.string().optional().nullable(),
+      handoffMode: z.enum(["ai_only", "ai_first_human_escalation", "human_only"]).optional(),
+      escalationTriggers: z.array(z.string()).optional(),
+      escalationMessage: z.string().optional().nullable(),
+      workingHoursEnabled: z.boolean().optional(),
+      workingHours: z.any().optional(),
+      offlineMessage: z.string().optional().nullable(),
+      leadCaptureEnabled: z.boolean().optional(),
+      leadCaptureFields: z.array(z.string()).optional(),
+      widgetColor: z.string().optional(),
+      widgetPosition: z.enum(["bottom-right", "bottom-left"]).optional(),
+      widgetSize: z.enum(["compact", "standard", "large"]).optional(),
+      widgetTheme: z.enum(["light", "dark"]).optional(),
+      widgetFont: z.string().optional(),
+      launcherIconUrl: z.string().optional().nullable(),
+      brandLogoUrl: z.string().optional().nullable(),
+      customCss: z.string().optional().nullable(),
+      isActive: z.boolean().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      return db.updateAgent(id, data);
+    }),
+  delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    await db.deleteAgent(input.id);
+    return { success: true };
+  }),
+});
+
+// ─── Knowledge Router ─────────────────────────────────────────────────────────
+const knowledgeRouter = router({
+  listArticles: protectedProcedure.query(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) return [];
+    return db.getArticlesByWorkspace(workspace.id);
+  }),
+  createArticle: protectedProcedure
+    .input(z.object({
+      title: z.string().min(1),
+      content: z.string().optional(),
+      category: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      agentId: z.number().optional(),
+      imageUrl: z.string().optional(),
+      sourceUrl: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) throw new TRPCError({ code: "BAD_REQUEST" });
+      return db.createArticle({ ...input, workspaceId: workspace.id });
+    }),
+  updateArticle: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      title: z.string().optional(),
+      content: z.string().optional(),
+      category: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      imageUrl: z.string().optional().nullable(),
+      status: z.enum(["indexing", "ready", "failed"]).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      return db.updateArticle(id, data);
+    }),
+  deleteArticle: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    await db.deleteArticle(input.id);
+    return { success: true };
+  }),
+  listQA: protectedProcedure.query(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) return [];
+    return db.getQAPairsByWorkspace(workspace.id);
+  }),
+  createQA: protectedProcedure
+    .input(z.object({
+      question: z.string().min(1),
+      answer: z.string().min(1),
+      category: z.string().optional(),
+      agentId: z.number().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) throw new TRPCError({ code: "BAD_REQUEST" });
+      return db.createQAPair({ ...input, workspaceId: workspace.id });
+    }),
+  updateQA: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      question: z.string().optional(),
+      answer: z.string().optional(),
+      category: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      return db.updateQAPair(id, data);
+    }),
+  deleteQA: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    await db.deleteQAPair(input.id);
+    return { success: true };
+  }),
+});
+
+// ─── Inbox Router ─────────────────────────────────────────────────────────────
+const inboxRouter = router({
+  listConversations: protectedProcedure
+    .input(z.object({ status: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) return [];
+      return db.getConversationsByWorkspace(workspace.id, input.status);
+    }),
+  getConversation: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+    return db.getConversationById(input.id);
+  }),
+  createConversation: protectedProcedure
+    .input(z.object({
+      agentId: z.number().optional(),
+      visitorName: z.string().optional(),
+      visitorEmail: z.string().optional(),
+      channel: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) throw new TRPCError({ code: "BAD_REQUEST" });
+      const conv = await db.createConversation({ ...input, workspaceId: workspace.id, visitorId: `visitor_${Date.now()}` });
+      // Notify
+      await db.createNotification({
+        workspaceId: workspace.id,
+        userId: ctx.user.id,
+        type: "new_conversation",
+        title: "New Conversation",
+        body: `New conversation from ${input.visitorName ?? "visitor"}`,
+        relatedId: conv?.id,
+        relatedType: "conversation",
+      });
+      return conv;
+    }),
+  updateConversation: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      status: z.enum(["open", "pending", "resolved"]).optional(),
+      assignedUserId: z.number().optional().nullable(),
+      handoffMode: z.enum(["ai", "human"]).optional(),
+      isEscalated: z.boolean().optional(),
+      csatScore: z.number().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...data } = input;
+      const conv = await db.updateConversation(id, data);
+      if (data.isEscalated) {
+        const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+        if (workspace) {
+          await db.createNotification({
+            workspaceId: workspace.id,
+            userId: ctx.user.id,
+            type: "escalation",
+            title: "Conversation Escalated",
+            body: `Conversation #${id} has been escalated to a human agent`,
+            relatedId: id,
+            relatedType: "conversation",
+          });
+        }
+      }
+      return conv;
+    }),
+  getMessages: protectedProcedure.input(z.object({ conversationId: z.number() })).query(async ({ input }) => {
+    return db.getMessagesByConversation(input.conversationId);
+  }),
+  sendMessage: protectedProcedure
+    .input(z.object({
+      conversationId: z.number(),
+      content: z.string().min(1),
+      role: z.enum(["user", "agent", "system", "note"]),
+      isInternal: z.boolean().optional(),
+      attachmentUrl: z.string().optional(),
+      attachmentType: z.string().optional(),
+      attachmentName: z.string().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      return db.createMessage(input);
+    }),
+  suggestReply: protectedProcedure
+    .input(z.object({
+      conversationId: z.number(),
+      agentId: z.number().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const msgs = await db.getMessagesByConversation(input.conversationId);
+      const agent = input.agentId ? await db.getAgentById(input.agentId) : null;
+      const systemPrompt = agent?.systemPrompt ?? "You are a helpful customer support agent. Suggest a professional reply to the latest customer message.";
+      const history: Array<{ role: "user" | "assistant" | "system"; content: string }> = msgs.slice(-10).map((m) => ({
+        role: (m.role === "agent" ? "assistant" : m.role === "note" ? "system" : "user") as "user" | "assistant" | "system",
+        content: m.content,
+      }));
+      const response = await invokeLLM({
+        messages: [
+          { role: "system" as const, content: `${systemPrompt}\n\nSuggest a concise, helpful reply to the last customer message. Return only the reply text.` },
+          ...history.map(m => ({ role: m.role, content: String(m.content) })),
+        ] as LLMMessage[],
+      });
+      return { suggestion: response.choices[0]?.message?.content ?? "" };
+    }),
+});
+
+// ─── Tickets Router ───────────────────────────────────────────────────────────
+const ticketsRouter = router({
+  list: protectedProcedure
+    .input(z.object({ status: z.string().optional() }))
+    .query(async ({ ctx, input }) => {
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) return [];
+      return db.getTicketsByWorkspace(workspace.id, input.status);
+    }),
+  get: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+    return db.getTicketById(input.id);
+  }),
+  create: protectedProcedure
+    .input(z.object({
+      title: z.string().min(1),
+      description: z.string().optional(),
+      priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+      conversationId: z.number().optional(),
+      assignedUserId: z.number().optional(),
+      tags: z.array(z.string()).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) throw new TRPCError({ code: "BAD_REQUEST" });
+      const ticket = await db.createTicket({ ...input, workspaceId: workspace.id });
+      await db.createNotification({
+        workspaceId: workspace.id,
+        userId: ctx.user.id,
+        type: "new_ticket",
+        title: "New Ticket Created",
+        body: `Ticket: ${input.title}`,
+        relatedId: ticket?.id,
+        relatedType: "ticket",
+      });
+      return ticket;
+    }),
+  update: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      title: z.string().optional(),
+      description: z.string().optional(),
+      status: z.enum(["open", "in-progress", "closed"]).optional(),
+      priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
+      assignedUserId: z.number().optional().nullable(),
+      tags: z.array(z.string()).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      return db.updateTicket(id, data);
+    }),
+    delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    await db.deleteTicket(input.id);
+    return { success: true };
+  }),
+  getNotes: protectedProcedure
+    .input(z.object({ ticketId: z.number() }))
+    .query(async ({ input }) => db.getNotesByTicket(input.ticketId)),
+  addNote: protectedProcedure
+    .input(z.object({ ticketId: z.number(), content: z.string().min(1), isInternal: z.boolean().optional() }))
+    .mutation(async ({ ctx, input }) => {
+      return db.createTicketNote({ ...input, userId: ctx.user.id });
+    }),
+  deleteNote: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await db.deleteTicketNote(input.id);
+      return { success: true };
+    }),
+});
+// ─── Campaigns Router ─────────────────────────────────────────────────────────
+const campaignsRouter = router({
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) return [];
+    return db.getCampaignsByWorkspace(workspace.id);
+  }),
+  get: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+    return db.getCampaignById(input.id);
+  }),
+  create: protectedProcedure
+    .input(z.object({
+      name: z.string().min(1),
+      type: z.enum(["broadcast", "drip"]).optional(),
+      message: z.string().min(1),
+      agentId: z.number().optional(),
+      targetUrlPattern: z.string().optional(),
+      triggerDelay: z.number().optional(),
+      scheduledAt: z.date().optional(),
+      targetSegment: z.any().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) throw new TRPCError({ code: "BAD_REQUEST" });
+      return db.createCampaign({ ...input, workspaceId: workspace.id });
+    }),
+  update: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      name: z.string().optional(),
+      message: z.string().optional(),
+      status: z.enum(["draft", "scheduled", "running", "completed", "paused"]).optional(),
+      scheduledAt: z.date().optional().nullable(),
+      targetUrlPattern: z.string().optional(),
+      triggerDelay: z.number().optional(),
+      sentCount: z.number().optional(),
+      openCount: z.number().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const { id, ...data } = input;
+      const campaign = await db.updateCampaign(id, data);
+      if (data.status === "completed") {
+        const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+        if (workspace) {
+          await db.createNotification({
+            workspaceId: workspace.id,
+            userId: ctx.user.id,
+            type: "campaign_complete",
+            title: "Campaign Completed",
+            body: `Campaign "${campaign?.name}" has finished sending`,
+            relatedId: id,
+            relatedType: "campaign",
+          });
+        }
+      }
+      return campaign;
+    }),
+  delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    await db.deleteCampaign(input.id);
+    return { success: true };
+  }),
+});
+
+// ─── Analytics Router ─────────────────────────────────────────────────────────
+const analyticsRouter = router({
+  summary: protectedProcedure.query(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) return { total: 0, resolved: 0, escalated: 0, avgCsat: 0 };
+    return db.getAnalyticsSummary(workspace.id);
+  }),
+  conversationsByDay: protectedProcedure.query(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) return [];
+    return db.getConversationsByDay(workspace.id);
+  }),
+  agentPerformance: protectedProcedure.query(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) return [];
+    return db.getAgentPerformance(workspace.id);
+  }),
+});
+
+// ─── Notifications Router ─────────────────────────────────────────────────────
+const notificationsRouter = router({
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) return [];
+    return db.getNotificationsByWorkspace(workspace.id, ctx.user.id);
+  }),
+  markRead: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    await db.markNotificationRead(input.id);
+    return { success: true };
+  }),
+  markAllRead: protectedProcedure.mutation(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) return { success: false };
+    await db.markAllNotificationsRead(workspace.id, ctx.user.id);
+    return { success: true };
+  }),
+});
+
+// ─── Playground Router ────────────────────────────────────────────────────────
+const playgroundRouter = router({
+  getSession: protectedProcedure.input(z.object({ agentId: z.number() })).query(async ({ ctx, input }) => {
+    return db.getOrCreatePlaygroundSession(input.agentId, ctx.user.id);
+  }),
+  sendMessage: protectedProcedure
+    .input(z.object({
+      agentId: z.number(),
+      message: z.string().min(1),
+      model: z.string().optional(),
+      answerGuidance: z.enum(["conservative", "balanced", "creative"]).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const agent = await db.getAgentById(input.agentId);
+      if (!agent) throw new TRPCError({ code: "NOT_FOUND" });
+
+      const session = await db.getOrCreatePlaygroundSession(input.agentId, ctx.user.id);
+      const currentMessages = (session?.messages ?? []) as Array<{ role: string; content: string }>;
+
+      const guidance = input.answerGuidance ?? session?.answerGuidance ?? "balanced";
+      const guidanceInstructions = {
+        conservative: "Only answer from your knowledge base. If unsure, say you don't know.",
+        balanced: "Answer from your knowledge base when possible, but use general knowledge when needed.",
+        creative: "Use your full knowledge to provide comprehensive, creative answers.",
+      };
+
+      const systemPrompt = [
+        agent.systemPrompt ?? `You are ${agent.name}, a helpful AI assistant.`,
+        `Tone: ${agent.tone ?? "professional"}`,
+        `Language: ${agent.language ?? "English"}`,
+        `Response length: ${agent.maxResponseLength ?? "medium"}`,
+        `Answer guidance: ${guidanceInstructions[guidance as keyof typeof guidanceInstructions]}`,
+      ].join("\n");
+
+      const updatedMessages = [...currentMessages, { role: "user", content: input.message }];
+
+      const response = await invokeLLM({
+        model: input.model ?? session?.model ?? "gpt-4o-mini",
+        messages: [
+          { role: "system" as const, content: systemPrompt },
+          ...updatedMessages.slice(-20).map((m) => ({ role: m.role as "user" | "assistant", content: String(m.content) })),
+        ] as LLMMessage[],
+      });
+
+      const assistantReply = response.choices[0]?.message?.content ?? "I'm sorry, I couldn't generate a response.";
+      const finalMessages = [...updatedMessages, { role: "assistant", content: assistantReply }];
+
+      await db.updatePlaygroundSession(session!.id, {
+        messages: finalMessages as Array<{ role: string; content: string }>,
+        model: input.model ?? session?.model,
+        answerGuidance: guidance,
+      });
+
+      return { reply: assistantReply, messages: finalMessages };
+    }),
+  resetSession: protectedProcedure.input(z.object({ agentId: z.number() })).mutation(async ({ ctx, input }) => {
+    const session = await db.getOrCreatePlaygroundSession(input.agentId, ctx.user.id);
+    await db.updatePlaygroundSession(session!.id, { messages: [] });
+    return { success: true };
+  }),
+  updateSettings: protectedProcedure
+    .input(z.object({
+      agentId: z.number(),
+      model: z.string().optional(),
+      answerGuidance: z.enum(["conservative", "balanced", "creative"]).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const session = await db.getOrCreatePlaygroundSession(input.agentId, ctx.user.id);
+      return db.updatePlaygroundSession(session!.id, { model: input.model, answerGuidance: input.answerGuidance });
+    }),
+  listModels: protectedProcedure.query(async () => {
+    try {
+      const { listLLMModels } = await import("./_core/llm");
+      const result = await listLLMModels();
+      return result.data?.map((m: { id: string }) => m.id) ?? ["gpt-4o-mini", "gpt-4o"];
+    } catch {
+      return ["gpt-4o-mini", "gpt-4o"];
+    }
+  }),
+});
+
+// ─── File Upload Router ───────────────────────────────────────────────────────
+const uploadRouter = router({
+  getUploadUrl: protectedProcedure
+    .input(z.object({
+      filename: z.string(),
+      contentType: z.string(),
+      folder: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      // Return a signed upload endpoint
+      const key = `${input.folder ?? "uploads"}/${ctx.user.id}/${Date.now()}_${input.filename}`;
+      return { key, uploadEndpoint: `/api/upload?key=${encodeURIComponent(key)}` };
+    }),
+});
+
+// ─── App Router ───────────────────────────────────────────────────────────────
+export const appRouter = router({
+  system: systemRouter,
+  auth: router({
+    me: publicProcedure.query((opts) => opts.ctx.user),
+    logout: publicProcedure.mutation(({ ctx }) => {
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+      return { success: true } as const;
+    }),
+  }),
+  workspace: workspaceRouter,
+  agent: agentRouter,
+  knowledge: knowledgeRouter,
+  inbox: inboxRouter,
+  tickets: ticketsRouter,
+  campaigns: campaignsRouter,
+  analytics: analyticsRouter,
+  notifications: notificationsRouter,
+  playground: playgroundRouter,
+  upload: uploadRouter,
+});
+
+export type AppRouter = typeof appRouter;

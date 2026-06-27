@@ -1,0 +1,435 @@
+import { and, desc, eq, sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/mysql2";
+import {
+  InsertUser,
+  agents,
+  analyticsEvents,
+  campaigns,
+  conversations,
+  knowledgeArticles,
+  messages,
+  notifications,
+  playgroundSessions,
+  qaPairs,
+  ticketNotes,
+  tickets,
+  users,
+  workspaces,
+} from "../drizzle/schema";
+import { ENV } from "./_core/env";
+
+let _db: ReturnType<typeof drizzle> | null = null;
+
+export async function getDb() {
+  if (!_db && process.env.DATABASE_URL) {
+    try {
+      _db = drizzle(process.env.DATABASE_URL);
+    } catch (error) {
+      console.warn("[Database] Failed to connect:", error);
+      _db = null;
+    }
+  }
+  return _db;
+}
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+export async function upsertUser(user: InsertUser): Promise<void> {
+  if (!user.openId) throw new Error("User openId is required for upsert");
+  const db = await getDb();
+  if (!db) return;
+
+  const values: InsertUser = { openId: user.openId };
+  const updateSet: Record<string, unknown> = {};
+  const textFields = ["name", "email", "loginMethod"] as const;
+
+  for (const field of textFields) {
+    const value = user[field];
+    if (value === undefined) continue;
+    const normalized = value ?? null;
+    values[field] = normalized;
+    updateSet[field] = normalized;
+  }
+
+  if (user.lastSignedIn !== undefined) {
+    values.lastSignedIn = user.lastSignedIn;
+    updateSet.lastSignedIn = user.lastSignedIn;
+  }
+  if (user.role !== undefined) {
+    values.role = user.role;
+    updateSet.role = user.role;
+  } else if (user.openId === ENV.ownerOpenId) {
+    values.role = "admin";
+    updateSet.role = "admin";
+  }
+
+  if (!values.lastSignedIn) values.lastSignedIn = new Date();
+  if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
+
+  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+}
+
+export async function getUserByOpenId(openId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
+  return result[0];
+}
+
+// ─── Workspaces ───────────────────────────────────────────────────────────────
+export async function getWorkspaceByUserId(userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(workspaces).where(eq(workspaces.userId, userId)).limit(1);
+  return result[0];
+}
+
+export async function createWorkspace(data: { userId: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(workspaces).values({ userId: data.userId });
+  return result[0];
+}
+
+export async function updateWorkspace(id: number, data: Partial<typeof workspaces.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(workspaces).set(data).where(eq(workspaces.id, id));
+}
+
+// ─── Agents ───────────────────────────────────────────────────────────────────
+export async function getAgentsByWorkspace(workspaceId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(agents).where(eq(agents.workspaceId, workspaceId)).orderBy(desc(agents.createdAt));
+}
+
+export async function getAgentById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(agents).where(eq(agents.id, id)).limit(1);
+  return result[0];
+}
+
+export async function createAgent(data: typeof agents.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(agents).values(data);
+  const insertId = (result as unknown as [{ insertId: number }])[0]?.insertId;
+  return getAgentById(insertId);
+}
+
+export async function updateAgent(id: number, data: Partial<typeof agents.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(agents).set(data).where(eq(agents.id, id));
+  return getAgentById(id);
+}
+
+export async function deleteAgent(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(agents).where(eq(agents.id, id));
+}
+
+// ─── Knowledge Articles ───────────────────────────────────────────────────────
+export async function getArticlesByWorkspace(workspaceId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(knowledgeArticles).where(eq(knowledgeArticles.workspaceId, workspaceId)).orderBy(desc(knowledgeArticles.createdAt));
+}
+
+export async function getArticleById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(knowledgeArticles).where(eq(knowledgeArticles.id, id)).limit(1);
+  return result[0];
+}
+
+export async function createArticle(data: typeof knowledgeArticles.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(knowledgeArticles).values(data);
+  const insertId = (result as unknown as [{ insertId: number }])[0]?.insertId;
+  return getArticleById(insertId);
+}
+
+export async function updateArticle(id: number, data: Partial<typeof knowledgeArticles.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(knowledgeArticles).set(data).where(eq(knowledgeArticles.id, id));
+  return getArticleById(id);
+}
+
+export async function deleteArticle(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(knowledgeArticles).where(eq(knowledgeArticles.id, id));
+}
+
+// ─── Q&A Pairs ────────────────────────────────────────────────────────────────
+export async function getQAPairsByWorkspace(workspaceId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(qaPairs).where(eq(qaPairs.workspaceId, workspaceId)).orderBy(desc(qaPairs.createdAt));
+}
+
+export async function createQAPair(data: typeof qaPairs.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(qaPairs).values(data);
+  const insertId = (result as unknown as [{ insertId: number }])[0]?.insertId;
+  const rows = await db.select().from(qaPairs).where(eq(qaPairs.id, insertId)).limit(1);
+  return rows[0];
+}
+
+export async function updateQAPair(id: number, data: Partial<typeof qaPairs.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(qaPairs).set(data).where(eq(qaPairs.id, id));
+  const rows = await db.select().from(qaPairs).where(eq(qaPairs.id, id)).limit(1);
+  return rows[0];
+}
+
+export async function deleteQAPair(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(qaPairs).where(eq(qaPairs.id, id));
+}
+
+// ─── Conversations ────────────────────────────────────────────────────────────
+export async function getConversationsByWorkspace(workspaceId: number, status?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [eq(conversations.workspaceId, workspaceId)];
+  if (status) conditions.push(eq(conversations.status, status as "open" | "pending" | "resolved"));
+  return db.select().from(conversations).where(and(...conditions)).orderBy(desc(conversations.updatedAt));
+}
+
+export async function getConversationById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(conversations).where(eq(conversations.id, id)).limit(1);
+  return result[0];
+}
+
+export async function createConversation(data: typeof conversations.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(conversations).values(data);
+  const insertId = (result as unknown as [{ insertId: number }])[0]?.insertId;
+  return getConversationById(insertId);
+}
+
+export async function updateConversation(id: number, data: Partial<typeof conversations.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(conversations).set(data).where(eq(conversations.id, id));
+  return getConversationById(id);
+}
+
+// ─── Messages ─────────────────────────────────────────────────────────────────
+export async function getMessagesByConversation(conversationId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(messages).where(eq(messages.conversationId, conversationId)).orderBy(messages.createdAt);
+}
+
+export async function createMessage(data: typeof messages.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(messages).values(data);
+  const insertId = (result as unknown as [{ insertId: number }])[0]?.insertId;
+  const rows = await db.select().from(messages).where(eq(messages.id, insertId)).limit(1);
+  return rows[0];
+}
+
+// ─── Tickets ──────────────────────────────────────────────────────────────────
+export async function getTicketsByWorkspace(workspaceId: number, status?: string) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [eq(tickets.workspaceId, workspaceId)];
+  if (status) conditions.push(eq(tickets.status, status as "open" | "in-progress" | "closed"));
+  return db.select().from(tickets).where(and(...conditions)).orderBy(desc(tickets.createdAt));
+}
+
+export async function getTicketById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(tickets).where(eq(tickets.id, id)).limit(1);
+  return result[0];
+}
+
+export async function createTicket(data: typeof tickets.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(tickets).values(data);
+  const insertId = (result as unknown as [{ insertId: number }])[0]?.insertId;
+  return getTicketById(insertId);
+}
+
+export async function updateTicket(id: number, data: Partial<typeof tickets.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(tickets).set(data).where(eq(tickets.id, id));
+  return getTicketById(id);
+}
+
+export async function deleteTicket(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(tickets).where(eq(tickets.id, id));
+}
+// ─── Ticket Notes ────────────────────────────────────────────────────────────────
+export async function getNotesByTicket(ticketId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(ticketNotes).where(eq(ticketNotes.ticketId, ticketId)).orderBy(ticketNotes.createdAt);
+}
+export async function createTicketNote(data: typeof ticketNotes.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [result] = await db.insert(ticketNotes).values(data);
+  const insertId = (result as { insertId?: number })?.insertId;
+  if (!insertId) return null;
+  const [note] = await db.select().from(ticketNotes).where(eq(ticketNotes.id, insertId)).limit(1);
+  return note ?? null;
+}
+export async function deleteTicketNote(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(ticketNotes).where(eq(ticketNotes.id, id));
+}
+// ─── Campaigns ────────────────────────────────────────────────────────────────
+export async function getCampaignsByWorkspace(workspaceId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(campaigns).where(eq(campaigns.workspaceId, workspaceId)).orderBy(desc(campaigns.createdAt));
+}
+
+export async function getCampaignById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(campaigns).where(eq(campaigns.id, id)).limit(1);
+  return result[0];
+}
+
+export async function createCampaign(data: typeof campaigns.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(campaigns).values(data);
+  const insertId = (result as unknown as [{ insertId: number }])[0]?.insertId;
+  return getCampaignById(insertId);
+}
+
+export async function updateCampaign(id: number, data: Partial<typeof campaigns.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(campaigns).set(data).where(eq(campaigns.id, id));
+  return getCampaignById(id);
+}
+
+export async function deleteCampaign(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(campaigns).where(eq(campaigns.id, id));
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+export async function getNotificationsByWorkspace(workspaceId: number, userId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [eq(notifications.workspaceId, workspaceId)];
+  if (userId) conditions.push(eq(notifications.userId, userId));
+  return db.select().from(notifications).where(and(...conditions)).orderBy(desc(notifications.createdAt)).limit(50);
+}
+
+export async function createNotification(data: typeof notifications.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.insert(notifications).values(data);
+}
+
+export async function markNotificationRead(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
+}
+
+export async function markAllNotificationsRead(workspaceId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(notifications).set({ isRead: true }).where(and(eq(notifications.workspaceId, workspaceId), eq(notifications.userId, userId)));
+}
+
+// ─── Analytics ────────────────────────────────────────────────────────────────
+export async function getAnalyticsSummary(workspaceId: number) {
+  const db = await getDb();
+  if (!db) return { total: 0, resolved: 0, escalated: 0, avgCsat: 0 };
+
+  const total = await db.select({ count: sql<number>`count(*)` }).from(conversations).where(eq(conversations.workspaceId, workspaceId));
+  const resolved = await db.select({ count: sql<number>`count(*)` }).from(conversations).where(and(eq(conversations.workspaceId, workspaceId), eq(conversations.status, "resolved")));
+  const escalated = await db.select({ count: sql<number>`count(*)` }).from(conversations).where(and(eq(conversations.workspaceId, workspaceId), eq(conversations.isEscalated, true)));
+  const csatResult = await db.select({ avg: sql<number>`avg(csatScore)` }).from(conversations).where(and(eq(conversations.workspaceId, workspaceId)));
+
+  return {
+    total: Number(total[0]?.count ?? 0),
+    resolved: Number(resolved[0]?.count ?? 0),
+    escalated: Number(escalated[0]?.count ?? 0),
+    avgCsat: Number(csatResult[0]?.avg ?? 0),
+  };
+}
+
+export async function getConversationsByDay(workspaceId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const result = await db
+    .select({
+      date: sql<string>`DATE(createdAt)`,
+      count: sql<number>`count(*)`,
+    })
+    .from(conversations)
+    .where(and(eq(conversations.workspaceId, workspaceId), sql`createdAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)`))
+    .groupBy(sql`DATE(createdAt)`)
+    .orderBy(sql`DATE(createdAt)`);
+  return result;
+}
+
+export async function getAgentPerformance(workspaceId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const agentList = await db.select().from(agents).where(eq(agents.workspaceId, workspaceId));
+  const performance = await Promise.all(
+    agentList.map(async (agent) => {
+      const total = await db.select({ count: sql<number>`count(*)` }).from(conversations).where(and(eq(conversations.workspaceId, workspaceId), eq(conversations.agentId, agent.id)));
+      const resolved = await db.select({ count: sql<number>`count(*)` }).from(conversations).where(and(eq(conversations.workspaceId, workspaceId), eq(conversations.agentId, agent.id), eq(conversations.status, "resolved")));
+      const escalated = await db.select({ count: sql<number>`count(*)` }).from(conversations).where(and(eq(conversations.workspaceId, workspaceId), eq(conversations.agentId, agent.id), eq(conversations.isEscalated, true)));
+      return {
+        agent,
+        total: Number(total[0]?.count ?? 0),
+        resolved: Number(resolved[0]?.count ?? 0),
+        escalated: Number(escalated[0]?.count ?? 0),
+      };
+    })
+  );
+  return performance;
+}
+
+// ─── Playground Sessions ──────────────────────────────────────────────────────
+export async function getOrCreatePlaygroundSession(agentId: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const existing = await db.select().from(playgroundSessions).where(and(eq(playgroundSessions.agentId, agentId), eq(playgroundSessions.userId, userId))).limit(1);
+  if (existing[0]) return existing[0];
+  const result = await db.insert(playgroundSessions).values({ agentId, userId, messages: [] });
+  const insertId = (result as unknown as [{ insertId: number }])[0]?.insertId;
+  const rows = await db.select().from(playgroundSessions).where(eq(playgroundSessions.id, insertId)).limit(1);
+  return rows[0];
+}
+
+export async function updatePlaygroundSession(id: number, data: Partial<typeof playgroundSessions.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(playgroundSessions).set(data).where(eq(playgroundSessions.id, id));
+  const rows = await db.select().from(playgroundSessions).where(eq(playgroundSessions.id, id)).limit(1);
+  return rows[0];
+}
