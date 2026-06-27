@@ -239,12 +239,12 @@ export default function Onboarding() {
                           companySize === size.id ? "border-primary bg-primary/5" : "border-border"
                         )}
                       >
-                        <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center text-lg font-bold", companySize === size.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
-                          {size.label.includes("+") ? "∞" : size.label.split("-")[0]}
+                        <div className={cn("w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold shrink-0", companySize === size.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground")}>
+                          {size.id.includes("+") ? "∞" : size.id.split("-")[0]}
                         </div>
-                        <div>
-                          <p className={cn("font-semibold", companySize === size.id ? "text-primary" : "text-foreground")}>{size.label} employees</p>
-                          <p className="text-sm text-muted-foreground">{size.desc}</p>
+                        <div className="min-w-0">
+                          <p className={cn("font-semibold truncate", companySize === size.id ? "text-primary" : "text-foreground")}>{size.label} employees</p>
+                          <p className="text-sm text-muted-foreground truncate">{size.desc}</p>
                         </div>
                         {companySize === size.id && <CheckCircle2 className="w-5 h-5 text-primary ml-auto" />}
                       </button>
