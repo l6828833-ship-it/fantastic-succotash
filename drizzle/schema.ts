@@ -310,11 +310,30 @@ export const affiliates = pgTable("affiliates", {
   userId: integer("userId").notNull().unique(),
   workspaceId: integer("workspaceId"),
   code: varchar("code", { length: 32 }).notNull().unique(),
+  // Manual balance adjustment (in cents) an admin can apply, e.g. to credit
+  // commission or deduct an already-settled amount.
+  adjustmentCents: integer("adjustmentCents").default(0),
   createdAt: ts("createdAt").defaultNow().notNull(),
   updatedAt: ts("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });
 
 export type Affiliate = typeof affiliates.$inferSelect;
+
+// ─── Affiliate payout (withdrawal) requests ───────────────────────────────────
+export const payoutRequests = pgTable("payout_requests", {
+  id: serial("id").primaryKey(),
+  affiliateId: integer("affiliateId").notNull(),
+  userId: integer("userId"),
+  amountCents: integer("amountCents").notNull(),
+  method: text("method").$type<"paypal" | "bank" | "wise" | "crypto">().notNull(),
+  details: jsonb("details").$type<Record<string, string>>(),
+  status: text("status").$type<"pending" | "approved" | "paid" | "rejected">().default("pending"),
+  adminNote: text("adminNote"),
+  createdAt: ts("createdAt").defaultNow().notNull(),
+  processedAt: ts("processedAt"),
+});
+
+export type PayoutRequest = typeof payoutRequests.$inferSelect;
 
 // ─── Referrals ──────────────────────────────────────────────────────────────--
 export const referrals = pgTable("referrals", {

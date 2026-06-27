@@ -1,11 +1,39 @@
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
-import { Gift, Copy, Check, Users, Percent, DollarSign, TrendingUp, Link2 } from "lucide-react";
+import { Gift, Copy, Check, Users, Percent, DollarSign, TrendingUp, Link2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { toast } from "sonner";
+
+type WithdrawMethod = "paypal" | "bank" | "wise" | "crypto";
+
+const METHOD_FIELDS: Record<WithdrawMethod, { key: string; label: string; placeholder?: string }[]> = {
+  paypal: [{ key: "email", label: "PayPal email", placeholder: "you@example.com" }],
+  bank: [
+    { key: "accountName", label: "Account holder name" },
+    { key: "bankName", label: "Bank name" },
+    { key: "accountNumber", label: "Account number / IBAN" },
+    { key: "swift", label: "SWIFT / routing number" },
+  ],
+  wise: [
+    { key: "email", label: "Wise email", placeholder: "you@example.com" },
+    { key: "accountName", label: "Account holder name" },
+  ],
+  crypto: [
+    { key: "network", label: "Network", placeholder: "e.g. USDT (TRC20), BTC, ETH" },
+    { key: "address", label: "Wallet address" },
+  ],
+};
+
+const METHOD_LABELS: Record<WithdrawMethod, string> = { paypal: "PayPal", bank: "Bank transfer", wise: "Wise", crypto: "Crypto" };
+
+type Payout = { id: number; amountCents: number; method: string; status?: string | null; adminNote?: string | null; createdAt: string | Date };
 
 type Referral = {
   id: number;
@@ -38,7 +66,37 @@ const money = (cents?: number | null) => `$${((cents ?? 0) / 100).toFixed(2)}`;
 export default function Affiliate() {
   const { data, isLoading } = trpc.affiliate.get.useQuery();
   const { data: referrals = [] } = trpc.affiliate.listReferrals.useQuery();
+  const { data: payouts = [] } = trpc.affiliate.payouts.useQuery();
+  const utils = trpc.useUtils();
   const [copied, setCopied] = useState(false);
+
+  const [open, setOpen] = useState(false);
+  const [amount, setAmount] = useState("");
+  const [method, setMethod] = useState<WithdrawMethod>("paypal");
+  const [details, setDetails] = useState<Record<string, string>>({});
+  const requestWithdrawal = trpc.affiliate.requestWithdrawal.useMutation({
+    onSuccess: () => {
+      utils.affiliate.payouts.invalidate();
+      utils.affiliate.get.invalidate();
+      toast.success("Withdrawal request submitted");
+      setOpen(false); setAmount(""); setDetails({});
+    },
+    onError: (e) => toast.error(e.message || "Failed to submit request"),
+  });
+
+  const availableCents = data?.availableCents ?? 0;
+  const minCents = data?.minWithdrawalCents ?? 2500;
+  const payoutRows = payouts as Payout[];
+
+  const submitWithdrawal = () => {
+    const cents = Math.round((parseFloat(amount) || 0) * 100);
+    if (cents < minCents) { toast.error(`The minimum withdrawal is ${money(minCents)}.`); return; }
+    if (cents > availableCents) { toast.error("Amount exceeds your available balance."); return; }
+    for (const f of METHOD_FIELDS[method]) {
+      if (!(details[f.key] ?? "").trim()) { toast.error(`Please fill in "${f.label}".`); return; }
+    }
+    requestWithdrawal.mutate({ amountCents: cents, method, details });
+  };
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const link = data?.code ? `${origin}/?ref=${data.code}` : "";
@@ -106,6 +164,112 @@ export default function Affiliate() {
           icon={TrendingUp}
         />
       </div>
+
+      {/* Withdrawals */}
+      <Card className="border-border">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <CardTitle className="text-sm font-semibold flex items-center gap-2"><Wallet className="w-4 h-4 text-primary" />Withdrawals</CardTitle>
+              <CardDescription className="text-xs">Withdraw your available balance. Minimum {money(minCents)} per request.</CardDescription>
+            </div>
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-2" disabled={availableCents < minCents}>
+                  <DollarSign className="w-4 h-4" />Request withdrawal
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Request a withdrawal</DialogTitle>
+                  <DialogDescription>
+                    Minimum {money(minCents)}. Available balance: <span className="font-semibold text-foreground">{money(availableCents)}</span>. Paid after admin review.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Amount (USD)</Label>
+                    <Input type="number" min={minCents / 100} step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="25.00" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Payout method</Label>
+                    <Select value={method} onValueChange={(v) => { setMethod(v as WithdrawMethod); setDetails({}); }}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {(Object.keys(METHOD_LABELS) as WithdrawMethod[]).map((m) => (
+                          <SelectItem key={m} value={m}>{METHOD_LABELS[m]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {METHOD_FIELDS[method].map((f) => (
+                    <div key={f.key} className="space-y-1.5">
+                      <Label className="text-xs">{f.label}</Label>
+                      <Input value={details[f.key] ?? ""} placeholder={f.placeholder} onChange={(e) => setDetails((d) => ({ ...d, [f.key]: e.target.value }))} />
+                    </div>
+                  ))}
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+                  <Button disabled={requestWithdrawal.isPending} onClick={submitWithdrawal}>
+                    {requestWithdrawal.isPending ? "Submitting…" : "Submit request"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">Available</p>
+              <p className="text-lg font-bold text-foreground">{money(availableCents)}</p>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">Pending / requested</p>
+              <p className="text-lg font-bold text-foreground">{money(data?.reservedCents)}</p>
+            </div>
+            <div className="rounded-lg border border-border p-3">
+              <p className="text-xs text-muted-foreground">Paid out</p>
+              <p className="text-lg font-bold text-foreground">{money(data?.paidCents)}</p>
+            </div>
+          </div>
+          {availableCents < minCents && (
+            <p className="text-xs text-muted-foreground">You need at least {money(minCents)} available to request a withdrawal.</p>
+          )}
+
+          {payoutRows.length > 0 && (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-muted-foreground border-b border-border">
+                  <th className="font-medium py-2">Date</th>
+                  <th className="font-medium py-2">Method</th>
+                  <th className="font-medium py-2">Status</th>
+                  <th className="font-medium py-2 text-right">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payoutRows.map((p) => (
+                  <tr key={p.id} className="border-b border-border last:border-0">
+                    <td className="py-2.5 text-muted-foreground">{new Date(p.createdAt).toLocaleDateString()}</td>
+                    <td className="py-2.5 capitalize text-foreground">{METHOD_LABELS[p.method as WithdrawMethod] ?? p.method}</td>
+                    <td className="py-2.5">
+                      <Badge variant="outline" className={cn(
+                        "text-xs capitalize",
+                        p.status === "paid" && "bg-green-500/10 text-green-600 border-green-200",
+                        p.status === "approved" && "bg-blue-500/10 text-blue-600 border-blue-200",
+                        p.status === "rejected" && "bg-red-500/10 text-red-600 border-red-200",
+                        (!p.status || p.status === "pending") && "bg-amber-500/10 text-amber-600 border-amber-200",
+                      )}>{p.status ?? "pending"}</Badge>
+                    </td>
+                    <td className="py-2.5 text-right text-foreground">{money(p.amountCents)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Tier ladder */}
       <Card className="border-border">

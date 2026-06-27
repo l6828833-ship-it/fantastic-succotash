@@ -927,6 +927,30 @@ const uploadRouter = router({
 // ─── Affiliate Router ─────────────────────────────────────────────────────────
 const genAffiliateCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
 
+const genAffiliateCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
+
+// Minimum withdrawal amount an affiliate can request.
+const MIN_WITHDRAWAL_CENTS = 2500;
+
+// Shared balance computation for an affiliate. Earnings = commission rate
+// applied to the (non-cancelled) referral revenue, plus any manual admin
+// adjustment. Anything not rejected (pending/approved/paid) is reserved against
+// the available balance so it can't be requested twice.
+async function computeAffiliate(affiliate: { id: number; adjustmentCents?: number | null }) {
+  const refs = await db.getReferralsByAffiliate(affiliate.id);
+  const referralCount = refs.length;
+  const activeReferrals = refs.filter((r) => r.status === "active").length;
+  const rate = db.commissionRateForReferrals(referralCount);
+  const revenueCents = refs.filter((r) => r.status !== "cancelled").reduce((s, r) => s + (r.amount ?? 0), 0);
+  const earningsCents = Math.round((revenueCents * rate) / 100);
+  const adjustmentCents = affiliate.adjustmentCents ?? 0;
+  const payouts = await db.getPayoutsByAffiliate(affiliate.id);
+  const reservedCents = payouts.filter((p) => p.status !== "rejected").reduce((s, p) => s + (p.amountCents ?? 0), 0);
+  const paidCents = payouts.filter((p) => p.status === "paid").reduce((s, p) => s + (p.amountCents ?? 0), 0);
+  const availableCents = Math.max(0, earningsCents + adjustmentCents - reservedCents);
+  return { referralCount, activeReferrals, rate, revenueCents, earningsCents, adjustmentCents, reservedCents, paidCents, availableCents };
+}
+
 const affiliateRouter = router({
   get: protectedProcedure.query(async ({ ctx }) => {
     let affiliate = await db.getAffiliateByUserId(ctx.user.id);
@@ -945,22 +969,22 @@ const affiliateRouter = router({
     }
     if (!affiliate) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not create affiliate account" });
 
-    const refs = await db.getReferralsByAffiliate(affiliate.id);
-    const referralCount = refs.length;
-    const activeReferrals = refs.filter((r) => r.status === "active").length;
-    const rate = db.commissionRateForReferrals(referralCount);
-    const revenueCents = refs.filter((r) => r.status !== "cancelled").reduce((sum, r) => sum + (r.amount ?? 0), 0);
-    const earningsCents = Math.round((revenueCents * rate) / 100);
-    const nextTier = db.AFFILIATE_TIERS.find((t) => referralCount < t.min) ?? null;
+    const b = await computeAffiliate(affiliate);
+    const nextTier = db.AFFILIATE_TIERS.find((t) => b.referralCount < t.min) ?? null;
 
     return {
       code: affiliate.code,
-      referralCount,
-      activeReferrals,
-      rate,
-      earningsCents,
+      referralCount: b.referralCount,
+      activeReferrals: b.activeReferrals,
+      rate: b.rate,
+      earningsCents: b.earningsCents,
+      adjustmentCents: b.adjustmentCents,
+      reservedCents: b.reservedCents,
+      paidCents: b.paidCents,
+      availableCents: b.availableCents,
+      minWithdrawalCents: MIN_WITHDRAWAL_CENTS,
       tiers: db.AFFILIATE_TIERS,
-      nextTier: nextTier ? { rate: nextTier.rate, min: nextTier.min, remaining: nextTier.min - referralCount } : null,
+      nextTier: nextTier ? { rate: nextTier.rate, min: nextTier.min, remaining: nextTier.min - b.referralCount } : null,
     };
   }),
   listReferrals: protectedProcedure.query(async ({ ctx }) => {
@@ -968,6 +992,36 @@ const affiliateRouter = router({
     if (!affiliate) return [];
     return db.getReferralsByAffiliate(affiliate.id);
   }),
+  payouts: protectedProcedure.query(async ({ ctx }) => {
+    const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+    if (!affiliate) return [];
+    return db.getPayoutsByAffiliate(affiliate.id);
+  }),
+  requestWithdrawal: protectedProcedure
+    .input(z.object({
+      amountCents: z.number().int().positive(),
+      method: z.enum(["paypal", "bank", "wise", "crypto"]),
+      details: z.record(z.string(), z.string()).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+      if (!affiliate) throw new TRPCError({ code: "NOT_FOUND", message: "No affiliate account found" });
+      if (input.amountCents < MIN_WITHDRAWAL_CENTS) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "The minimum withdrawal is $25." });
+      }
+      const b = await computeAffiliate(affiliate);
+      if (input.amountCents > b.availableCents) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Amount exceeds your available balance." });
+      }
+      return db.createPayoutRequest({
+        affiliateId: affiliate.id,
+        userId: ctx.user.id,
+        amountCents: input.amountCents,
+        method: input.method,
+        details: input.details ?? {},
+        status: "pending",
+      });
+    }),
 });
 
 // ─── Admin Router (platform super-admin; role === "admin") ────────────────────
@@ -987,6 +1041,48 @@ const adminRouter = router({
       await creditReferralForUpgrade({ workspaceId: input.id, plan: input.plan });
       return { success: true };
     }),
+  // ─── Affiliate management ───────────────────────────────────────────────────
+  affiliates: adminProcedure.query(async () => {
+    const [list, allUsers] = await Promise.all([db.getAllAffiliates(), db.getAllUsers()]);
+    const userMap = new Map(allUsers.map((u) => [u.id, u]));
+    const out = [];
+    for (const aff of list) {
+      const b = await computeAffiliate(aff);
+      const owner = userMap.get(aff.userId);
+      out.push({
+        id: aff.id,
+        userId: aff.userId,
+        code: aff.code,
+        ownerName: owner?.name ?? null,
+        ownerEmail: owner?.email ?? null,
+        referralCount: b.referralCount,
+        activeReferrals: b.activeReferrals,
+        rate: b.rate,
+        earningsCents: b.earningsCents,
+        adjustmentCents: b.adjustmentCents,
+        reservedCents: b.reservedCents,
+        paidCents: b.paidCents,
+        availableCents: b.availableCents,
+      });
+    }
+    return out;
+  }),
+  payouts: adminProcedure.query(async () => {
+    const [list, affs, allUsers] = await Promise.all([db.getAllPayouts(), db.getAllAffiliates(), db.getAllUsers()]);
+    const affMap = new Map(affs.map((a) => [a.id, a]));
+    const userMap = new Map(allUsers.map((u) => [u.id, u]));
+    return list.map((p) => {
+      const aff = affMap.get(p.affiliateId);
+      const owner = aff ? userMap.get(aff.userId) : undefined;
+      return { ...p, affiliateCode: aff?.code ?? null, ownerEmail: owner?.email ?? null, ownerName: owner?.name ?? null };
+    });
+  }),
+  setPayoutStatus: adminProcedure
+    .input(z.object({ id: z.number(), status: z.enum(["pending", "approved", "paid", "rejected"]), adminNote: z.string().optional() }))
+    .mutation(async ({ input }) => db.updatePayoutStatus(input.id, input.status, input.adminNote ?? null)),
+  setAffiliateAdjustment: adminProcedure
+    .input(z.object({ id: z.number(), amountCents: z.number().int() }))
+    .mutation(async ({ input }) => db.updateAffiliateAdjustment(input.id, input.amountCents)),
 });
 
 // ─── App Router ───────────────────────────────────────────────────────────────
