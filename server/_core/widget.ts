@@ -32,11 +32,12 @@ const WIDGET_JS = `(function(){
     color: cfg.color || "#6366f1",
     position: cfg.position === "bottom-left" ? "bottom-left" : "bottom-right",
     size: sizeMap[cfg.size] ? cfg.size : "standard",
-    theme: cfg.theme === "dark" ? "dark" : "light"
+    theme: cfg.theme === "dark" ? "dark" : "light",
+    font: cfg.font || "Inter"
   };
 
   // Derived style values — (re)computed by applySettings().
-  var color, side, dark, panelW, bg, fg, sub, border;
+  var color, side, dark, panelW, bg, fg, sub, border, fontStack;
 
   var storeKey = "chatbotpro_conv_" + agentId;
   var leadStoreKey = "chatbotpro_lead_" + agentId;
@@ -111,7 +112,7 @@ const WIDGET_JS = `(function(){
       + ".cbp-launcher:hover{transform:scale(1.06);}"
       + ".cbp-launcher svg{width:26px;height:26px;fill:#fff;}"
       + ".cbp-launcher img{width:30px;height:30px;border-radius:8px;object-fit:cover;}"
-      + ".cbp-panel{position:fixed;bottom:88px;" + side + ":20px;width:" + panelW + "px;max-width:calc(100vw - 40px);height:560px;max-height:calc(100vh - 120px);background:" + bg + ";color:" + fg + ";border:1px solid " + border + ";border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.28);z-index:2147483000;display:none;flex-direction:column;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;}"
+      + ".cbp-panel{position:fixed;bottom:88px;" + side + ":20px;width:" + panelW + "px;max-width:calc(100vw - 40px);height:560px;max-height:calc(100vh - 120px);background:" + bg + ";color:" + fg + ";border:1px solid " + border + ";border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.28);z-index:2147483000;display:none;flex-direction:column;overflow:hidden;font-family:" + fontStack + ";}"
       + ".cbp-panel.cbp-open{display:flex;}"
       + ".cbp-head{padding:14px 16px;color:#fff;display:flex;align-items:center;gap:10px;}"
       + ".cbp-head .cbp-av{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;overflow:hidden;}"
@@ -158,6 +159,7 @@ const WIDGET_JS = `(function(){
     fg = dark ? "#e5e7eb" : "#111827";
     sub = dark ? "#1c1c28" : "#f3f4f6";
     border = dark ? "#26263a" : "#e5e7eb";
+    fontStack = "'" + (settings.font || "Inter") + "',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
     style.textContent = buildCss();
     launcher.style.background = color;
@@ -457,6 +459,7 @@ const WIDGET_JS = `(function(){
     if (a.position) settings.position = a.position === "bottom-left" ? "bottom-left" : "bottom-right";
     if (a.size && sizeMap[a.size]) settings.size = a.size;
     if (a.theme) settings.theme = a.theme === "dark" ? "dark" : "light";
+    if (a.font) settings.font = a.font;
     applySettings();
     if (a.avatarUrl){ avatar.innerHTML = '<img src="' + a.avatarUrl + '" alt="">'; }
     // Launcher icon (preset id or uploaded URL), gated by the workspace plan.
@@ -503,6 +506,7 @@ export function registerWidgetRoutes(app: Express) {
         position: agent.widgetPosition ?? "bottom-right",
         size: agent.widgetSize ?? "standard",
         theme: agent.widgetTheme ?? "light",
+        font: agent.widgetFont ?? "Inter",
         avatarUrl: agent.avatarUrl ?? null,
         launcherIcon: agent.launcherIconUrl ?? "chat",
         leadCapture: agent.leadCaptureEnabled ?? false,

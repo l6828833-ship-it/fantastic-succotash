@@ -248,6 +248,24 @@ CREATE TABLE IF NOT EXISTS "team_members" (
 ALTER TABLE "tickets" ADD COLUMN IF NOT EXISTS "contactId" integer;
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "passwordHash" text;
 ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "ticketMode" text DEFAULT 'off';
+-- Widget appearance + customization columns. These were added to the agents
+-- CREATE TABLE block after the table already existed on deployed databases, so
+-- without these ALTER statements the live "agents" table is missing them. That
+-- caused agent.update to fail (or be ignored) and the embedded widget to always
+-- fall back to defaults — i.e. position/theme/color/size changes in Agent
+-- Settings never reached the widget. ADD COLUMN IF NOT EXISTS is idempotent.
+ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "avatarUrl" text;
+ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "typingDelay" integer DEFAULT 0;
+ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "leadCaptureEnabled" boolean DEFAULT false;
+ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "leadCaptureFields" jsonb;
+ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "widgetColor" varchar(32) DEFAULT '#6366f1';
+ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "widgetPosition" text DEFAULT 'bottom-right';
+ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "widgetSize" text DEFAULT 'standard';
+ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "widgetTheme" text DEFAULT 'light';
+ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "widgetFont" varchar(128) DEFAULT 'Inter';
+ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "launcherIconUrl" text;
+ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "brandLogoUrl" text;
+ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "customCss" text;
 ALTER TABLE "campaigns" ADD COLUMN IF NOT EXISTS "subject" varchar(512);
 
 CREATE TABLE IF NOT EXISTS "affiliates" (
