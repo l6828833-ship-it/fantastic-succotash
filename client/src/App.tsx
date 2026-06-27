@@ -205,7 +205,8 @@ function App() {
     try {
       const ref = new URLSearchParams(window.location.search).get("ref");
       if (ref && /^[A-Za-z0-9]{4,32}$/.test(ref)) {
-        document.cookie = `cbp_ref=${encodeURIComponent(ref)}; path=/; max-age=2592000; samesite=lax`;
+        // Persist the referral code for 5 days so it survives the OAuth round-trip.
+        document.cookie = `cbp_ref=${encodeURIComponent(ref)}; path=/; max-age=432000; samesite=lax`;
       }
     } catch {
       // ignore (e.g. cookies disabled)
