@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import {
   Bot, Save, ArrowLeft, Play, Settings, Palette, Brain, Users, Clock, MessageSquare, Zap, Shield, Globe, ChevronRight, Upload, Loader2,
+  MessageCircle, HelpCircle, Sparkles, Bell, Phone, Heart, Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,9 +58,25 @@ const ESCALATION_TRIGGERS = [
   "Technical issue reported",
 ];
 
+// Chat launcher button icons. The first ("chat") is free on every plan; the
+// rest are premium and unlock on a paid plan. Ids must match the ICONS map in
+// the embed widget (server/_core/widget.ts).
+const LAUNCHER_ICONS: Array<{ id: string; label: string; Icon: typeof Bot; premium: boolean }> = [
+  { id: "chat", label: "Chat", Icon: MessageCircle, premium: false },
+  { id: "message", label: "Message", Icon: MessageSquare, premium: true },
+  { id: "help", label: "Help", Icon: HelpCircle, premium: true },
+  { id: "sparkles", label: "Sparkles", Icon: Sparkles, premium: true },
+  { id: "bell", label: "Bell", Icon: Bell, premium: true },
+  { id: "phone", label: "Phone", Icon: Phone, premium: true },
+  { id: "zap", label: "Lightning", Icon: Zap, premium: true },
+  { id: "heart", label: "Heart", Icon: Heart, premium: true },
+];
+
 export default function AgentEdit({ agentId }: AgentEditProps) {
   const [, navigate] = useLocation();
   const { data: agent, isLoading } = trpc.agent.get.useQuery({ id: agentId });
+  const { data: workspace } = trpc.workspace.get.useQuery();
+  const isPaidPlan = !!workspace?.plan && workspace.plan !== "starter" && workspace.plan !== "free";
   const updateAgent = trpc.agent.update.useMutation({
     onSuccess: () => toast.success("Agent updated successfully"),
     onError: () => toast.error("Failed to update agent"),
@@ -99,6 +116,7 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
   const [widgetSize, setWidgetSize] = useState("standard");
   const [widgetTheme, setWidgetTheme] = useState("light");
   const [widgetFont, setWidgetFont] = useState("Inter");
+  const [launcherIcon, setLauncherIcon] = useState("chat");
   const [isActive, setIsActive] = useState(true);
 
   useEffect(() => {
@@ -126,6 +144,7 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
       setWidgetSize(agent.widgetSize ?? "standard");
       setWidgetTheme(agent.widgetTheme ?? "light");
       setWidgetFont(agent.widgetFont ?? "Inter");
+      setLauncherIcon(LAUNCHER_ICONS.some((i) => i.id === agent.launcherIconUrl) ? (agent.launcherIconUrl as string) : "chat");
       setIsActive(agent.isActive ?? true);
     }
   }, [agent]);
@@ -145,6 +164,7 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
       widgetSize: widgetSize as "compact" | "standard" | "large",
       widgetTheme: widgetTheme as "light" | "dark",
       widgetFont, isActive,
+      launcherIconUrl: launcherIcon,
     });
   };
 
@@ -550,6 +570,51 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm">Chat Button Icon</Label>
+                      {!isPaidPlan && (
+                        <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                          <Lock className="w-3 h-3" /> Premium icons need a paid plan
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {LAUNCHER_ICONS.map(({ id, label, Icon, premium }) => {
+                        const locked = premium && !isPaidPlan;
+                        const selected = launcherIcon === id;
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            title={locked ? `${label} — upgrade to unlock` : label}
+                            onClick={() => {
+                              if (locked) {
+                                toast.error("Upgrade to a paid plan to use this chat icon");
+                                return;
+                              }
+                              setLauncherIcon(id);
+                            }}
+                            className={cn(
+                              "relative aspect-square rounded-lg border flex items-center justify-center transition-all",
+                              selected ? "border-primary bg-primary/5 text-primary" : "border-border text-foreground hover:bg-accent/30",
+                              locked && "opacity-60 cursor-not-allowed hover:bg-transparent"
+                            )}
+                          >
+                            <Icon className="w-5 h-5" />
+                            {locked && (
+                              <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-amber-500 text-white flex items-center justify-center">
+                                <Lock className="w-2.5 h-2.5" />
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      The Chat icon is free on every plan. Other icons unlock on a paid plan.
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -618,7 +683,10 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
                   {/* Launcher button */}
                   <div className={cn("flex mt-3", widgetPosition === "bottom-right" ? "justify-end" : "justify-start")}>
                     <div className="w-14 h-14 rounded-full shadow-xl flex items-center justify-center overflow-hidden" style={{ backgroundColor: widgetColor }}>
-                      {agent.avatarUrl ? <img src={agent.avatarUrl} alt="" className="w-full h-full object-cover" /> : <MessageSquare className="w-6 h-6 text-white" />}
+                      {(() => {
+                        const LauncherIcon = (LAUNCHER_ICONS.find((i) => i.id === launcherIcon) ?? LAUNCHER_ICONS[0]).Icon;
+                        return <LauncherIcon className="w-6 h-6 text-white" />;
+                      })()}
                     </div>
                   </div>
                 </div>
