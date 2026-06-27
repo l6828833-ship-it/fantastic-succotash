@@ -18,7 +18,6 @@ import KnowledgeBase from "./pages/KnowledgeBase";
 import Analytics from "./pages/Analytics";
 import EmbedCode from "./pages/EmbedCode";
 import Affiliate from "./pages/Affiliate";
-import Login from "./pages/Login";
 import Settings from "./pages/Settings";
 import AppLayout from "./components/AppLayout";
 import { useAuth } from "./_core/hooks/useAuth";
@@ -71,7 +70,6 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
 function Router() {
   return (
     <Switch>
-      <Route path="/login" component={Login} />
       <Route path="/" component={() => (
         <AuthGate>
           <OnboardingGate>
