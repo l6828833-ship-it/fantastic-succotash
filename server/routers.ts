@@ -276,6 +276,7 @@ const inboxRouter = router({
         content: m.content,
       }));
       const response = await invokeLLM({
+        model: "gpt-4o-mini",
         messages: [
           { role: "system" as const, content: `${systemPrompt}\n\nSuggest a concise, helpful reply to the last customer message. Return only the reply text.` },
           ...history.map(m => ({ role: m.role, content: String(m.content) })),
@@ -305,11 +306,58 @@ const ticketsRouter = router({
       conversationId: z.number().optional(),
       assignedUserId: z.number().optional(),
       tags: z.array(z.string()).optional(),
+      contactId: z.number().optional(),
+      contactName: z.string().optional(),
+      contactEmail: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const workspace = await db.getWorkspaceByUserId(ctx.user.id);
       if (!workspace) throw new TRPCError({ code: "BAD_REQUEST" });
-      const ticket = await db.createTicket({ ...input, workspaceId: workspace.id });
+
+      // Resolve or create the contact (customer) this ticket is for.
+      let contact = input.contactId ? await db.getContactById(input.contactId) : undefined;
+      const email = input.contactEmail?.trim();
+      if (!contact && email) {
+        contact = await db.findContactByEmail(workspace.id, email);
+        if (!contact) {
+          contact = await db.createContact({
+            workspaceId: workspace.id,
+            name: input.contactName?.trim() || email,
+            email,
+            channel: "web",
+            lastSeenAt: new Date(),
+          });
+        }
+      }
+
+      // Spin up a conversation so the ticket is immediately replyable.
+      let conversationId = input.conversationId ?? null;
+      if (!conversationId && contact) {
+        const conv = await db.createConversation({
+          workspaceId: workspace.id,
+          visitorId: `contact_${contact.id}`,
+          visitorName: contact.name ?? undefined,
+          visitorEmail: contact.email ?? undefined,
+          channel: contact.channel ?? "web",
+        });
+        conversationId = conv?.id ?? null;
+        // Seed the thread with the original request as the customer's first message.
+        if (conversationId && input.description) {
+          await db.createMessage({ conversationId, role: "user", content: input.description });
+        }
+      }
+
+      const ticket = await db.createTicket({
+        workspaceId: workspace.id,
+        title: input.title,
+        description: input.description,
+        priority: input.priority,
+        tags: input.tags,
+        assignedUserId: input.assignedUserId,
+        conversationId: conversationId ?? undefined,
+        contactId: contact?.id ?? undefined,
+      });
+
       await db.createNotification({
         workspaceId: workspace.id,
         userId: ctx.user.id,
@@ -330,12 +378,16 @@ const ticketsRouter = router({
       priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
       assignedUserId: z.number().optional().nullable(),
       conversationId: z.number().optional().nullable(),
+      contactId: z.number().optional().nullable(),
       tags: z.array(z.string()).optional(),
     }))
     .mutation(async ({ input }) => {
       const { id, ...data } = input;
       return db.updateTicket(id, data);
     }),
+  byContact: protectedProcedure
+    .input(z.object({ contactId: z.number() }))
+    .query(async ({ input }) => db.getTicketsByContact(input.contactId)),
     delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
     await db.deleteTicket(input.id);
     return { success: true };

@@ -44,6 +44,7 @@ type TicketRow = {
   assignedUserId?: number | null;
   tags?: unknown;
   conversationId?: number | null;
+  contactId?: number | null;
   workspaceId: number;
   createdAt: Date;
   updatedAt: Date;
@@ -63,6 +64,8 @@ export default function Tickets() {
   const [newPriority, setNewPriority] = useState<TicketPriority>("medium");
   const [newTag, setNewTag] = useState("");
   const [newTags, setNewTags] = useState<string[]>([]);
+  const [contactQuery, setContactQuery] = useState("");
+  const [selectedContact, setSelectedContact] = useState<{ id?: number; name?: string; email?: string } | null>(null);
 
   // Detail panel
   const [noteContent, setNoteContent] = useState("");
@@ -81,12 +84,14 @@ export default function Tickets() {
     { ticketId: selectedTicket?.id ?? 0 },
     { enabled: !!selectedTicket }
   );
+  const { data: allContacts = [] } = trpc.contacts.list.useQuery();
 
   const createTicket = trpc.tickets.create.useMutation({
     onSuccess: () => {
       utils.tickets.list.invalidate();
       setShowCreateDialog(false);
       setNewTitle(""); setNewDesc(""); setNewPriority("medium"); setNewTags([]);
+      setContactQuery(""); setSelectedContact(null);
       toast.success("Ticket created");
     },
     onError: () => toast.error("Failed to create ticket"),
@@ -180,8 +185,27 @@ export default function Tickets() {
 
   const handleCreate = () => {
     if (!newTitle.trim()) return toast.error("Title is required");
-    createTicket.mutate({ title: newTitle, description: newDesc, priority: newPriority, tags: newTags });
+    createTicket.mutate({
+      title: newTitle,
+      description: newDesc,
+      priority: newPriority,
+      tags: newTags,
+      ...(selectedContact?.id
+        ? { contactId: selectedContact.id }
+        : selectedContact?.email
+          ? { contactEmail: selectedContact.email, contactName: selectedContact.name }
+          : {}),
+    });
   };
+
+  const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
+  const contactMatches = (() => {
+    const q = contactQuery.trim().toLowerCase();
+    if (!q) return [] as Array<{ id: number; name?: string | null; email?: string | null; phone?: string | null }>;
+    return (allContacts as Array<{ id: number; name?: string | null; email?: string | null; phone?: string | null }>)
+      .filter((c) => [c.name, c.email, c.phone].some((v) => (v ?? "").toLowerCase().includes(q)))
+      .slice(0, 6);
+  })();
 
   const handleStatusChange = (status: TicketStatus) => {
     if (!selectedTicket) return;
@@ -619,6 +643,54 @@ export default function Tickets() {
             <div className="space-y-2">
               <Label>Description</Label>
               <Textarea value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="Detailed description..." className="resize-none min-h-[80px]" />
+            </div>
+            <div className="space-y-2">
+              <Label>Customer</Label>
+              {selectedContact ? (
+                <div className="flex items-center gap-2 p-2 rounded-md border border-border bg-muted/30">
+                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
+                    {(selectedContact.name ?? selectedContact.email ?? "?").charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{selectedContact.name ?? selectedContact.email}</p>
+                    {selectedContact.email && selectedContact.name && <p className="text-xs text-muted-foreground truncate">{selectedContact.email}</p>}
+                    {!selectedContact.id && <p className="text-xs text-primary">New contact</p>}
+                  </div>
+                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={() => { setSelectedContact(null); setContactQuery(""); }}>
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <Input value={contactQuery} onChange={(e) => setContactQuery(e.target.value)} placeholder="Search contacts or enter an email..." />
+                  {contactQuery.trim() && (
+                    <div className="border border-border rounded-md max-h-44 overflow-y-auto divide-y divide-border">
+                      {contactMatches.map((c) => (
+                        <button key={c.id} type="button" className="w-full text-left px-3 py-2 hover:bg-accent/40 flex items-center gap-2"
+                          onClick={() => setSelectedContact({ id: c.id, name: c.name ?? undefined, email: c.email ?? undefined })}>
+                          <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold text-primary shrink-0">
+                            {(c.name ?? c.email ?? "?").charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm text-foreground truncate">{c.name ?? "Unnamed"}</p>
+                            <p className="text-xs text-muted-foreground truncate">{c.email ?? c.phone ?? ""}</p>
+                          </div>
+                        </button>
+                      ))}
+                      {contactMatches.length === 0 && isEmail(contactQuery) && (
+                        <button type="button" className="w-full text-left px-3 py-2 hover:bg-accent/40 text-sm text-foreground"
+                          onClick={() => setSelectedContact({ email: contactQuery.trim() })}>
+                          Use new contact: <span className="font-medium">{contactQuery.trim()}</span>
+                        </button>
+                      )}
+                      {contactMatches.length === 0 && !isEmail(contactQuery) && (
+                        <p className="px-3 py-2 text-xs text-muted-foreground">No matches. Type a full email to create a new contact.</p>
+                      )}
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">Link a customer so you can reply to them. Leave empty for an internal-only ticket.</p>
+                </>
+              )}
             </div>
             <div className="space-y-2">
               <Label>Priority</Label>
