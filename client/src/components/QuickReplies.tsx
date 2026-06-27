@@ -170,16 +170,27 @@ export function QuickReplies({ onSelect, visitorName, draft, disabled }: QuickRe
           </div>
         ) : (
           <>
-            <div className="p-2 border-b border-border">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                <Input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search quick replies..."
-                  className="pl-8 h-8 text-sm"
-                  autoFocus
-                />
+            <div className="border-b border-border">
+              <div className="flex items-center justify-between px-3 pt-3 pb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
+                    <Zap className="w-3.5 h-3.5 text-primary" />
+                  </div>
+                  <p className="text-sm font-semibold text-foreground">Quick replies</p>
+                </div>
+                <Badge variant="secondary" className="text-[10px] h-5 px-1.5">{filtered.length}</Badge>
+              </div>
+              <div className="px-3 pb-2.5">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search quick replies..."
+                    className="pl-8 h-9 text-sm"
+                    autoFocus
+                  />
+                </div>
               </div>
             </div>
             <ScrollArea className="max-h-72">
@@ -204,7 +215,7 @@ export function QuickReplies({ onSelect, visitorName, draft, disabled }: QuickRe
                       {items.map((t) => (
                         <div
                           key={t.id}
-                          className="group flex items-start gap-2 px-3 py-2 hover:bg-accent/50 cursor-pointer transition-colors"
+                          className="group flex items-start gap-2 mx-2 px-2.5 py-2 rounded-lg hover:bg-accent cursor-pointer transition-colors"
                           onClick={() => handlePick(t)}
                         >
                           <div className="flex-1 min-w-0">

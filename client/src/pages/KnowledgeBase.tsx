@@ -1,7 +1,7 @@
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
-import { BookOpen, Plus, Search, Edit2, Trash2, FileText, CheckCircle2, MessageSquare, HelpCircle } from "lucide-react";
+import { BookOpen, Plus, Search, Edit2, Trash2, FileText, CheckCircle2, MessageSquare, HelpCircle, Globe, Loader2, Bot, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,6 +30,20 @@ export default function KnowledgeBase() {
   const [editingQaId, setEditingQaId] = useState<number | null>(null);
   const [qaQuestion, setQaQuestion] = useState("");
   const [qaAnswer, setQaAnswer] = useState("");
+
+  // ── Per-agent scoping + website import ───────────────────────────────────────
+  // "all" = everything, "shared" = applies to all agents (agentId null), or a
+  // specific agent id (as string). Used both to filter the list and as the
+  // default owner for newly created/imported knowledge.
+  const [agentScope, setAgentScope] = useState<string>("all");
+  const [websiteOpen, setWebsiteOpen] = useState(false);
+  const [websiteUrl, setWebsiteUrl] = useState("");
+
+  const { data: agents } = trpc.agent.list.useQuery();
+  const agentName = (id?: number | null) => agents?.find((a) => a.id === id)?.name;
+  // The agentId assigned to new items: a specific agent when one is selected,
+  // otherwise undefined (= shared across all agents).
+  const createAgentId = /^\d+$/.test(agentScope) ? Number(agentScope) : undefined;
 
   // ── Queries ─────────────────────────────────────────────────────────────────
   const { data: articles, refetch: refetchArticles } = trpc.knowledge.listArticles.useQuery();
@@ -63,6 +77,11 @@ export default function KnowledgeBase() {
     onError: () => toast.error("Failed to delete Q&A"),
   });
 
+  const importFromUrl = trpc.knowledge.importFromUrl.useMutation({
+    onSuccess: () => { refetchArticles(); setWebsiteOpen(false); setWebsiteUrl(""); toast.success("Website content imported!"); },
+    onError: (e) => toast.error(e.message || "Failed to import from website"),
+  });
+
   // ── Helpers ──────────────────────────────────────────────────────────────────
   const resetArticleForm = () => { setArticleTitle(""); setArticleContent(""); setArticleCategory("general"); setEditingArticleId(null); };
   const resetQAForm = () => { setQaQuestion(""); setQaAnswer(""); setEditingQaId(null); };
@@ -80,7 +99,7 @@ export default function KnowledgeBase() {
     if (editingArticleId) {
       updateArticle.mutate({ id: editingArticleId, title: articleTitle, content: articleContent, category: articleCategory });
     } else {
-      createArticle.mutate({ title: articleTitle, content: articleContent, category: articleCategory });
+      createArticle.mutate({ title: articleTitle, content: articleContent, category: articleCategory, agentId: createAgentId });
     }
   };
 
@@ -96,18 +115,26 @@ export default function KnowledgeBase() {
     if (editingQaId) {
       updateQA.mutate({ id: editingQaId, question: qaQuestion, answer: qaAnswer });
     } else {
-      createQA.mutate({ question: qaQuestion, answer: qaAnswer });
+      createQA.mutate({ question: qaQuestion, answer: qaAnswer, agentId: createAgentId });
     }
   };
 
+  const matchesScope = (itemAgentId?: number | null) => {
+    if (agentScope === "all") return true;
+    if (agentScope === "shared") return itemAgentId == null;
+    return itemAgentId === Number(agentScope);
+  };
+
   const filteredArticles = articles?.filter((a) =>
-    a.title.toLowerCase().includes(search.toLowerCase()) ||
-    (a.content ?? "").toLowerCase().includes(search.toLowerCase())
+    matchesScope((a as { agentId?: number | null }).agentId) &&
+    (a.title.toLowerCase().includes(search.toLowerCase()) ||
+    (a.content ?? "").toLowerCase().includes(search.toLowerCase()))
   ) ?? [];
 
   const filteredQA = qaPairs?.filter((q) =>
-    q.question.toLowerCase().includes(search.toLowerCase()) ||
-    q.answer.toLowerCase().includes(search.toLowerCase())
+    matchesScope((q as { agentId?: number | null }).agentId) &&
+    (q.question.toLowerCase().includes(search.toLowerCase()) ||
+    q.answer.toLowerCase().includes(search.toLowerCase()))
   ) ?? [];
 
   return (
@@ -150,6 +177,56 @@ export default function KnowledgeBase() {
           onChange={(e) => setSearch(e.target.value)}
           className="pl-9"
         />
+      </div>
+
+      {/* Agent scope + website import */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-center gap-2">
+          <Users className="w-4 h-4 text-muted-foreground shrink-0" />
+          <Select value={agentScope} onValueChange={setAgentScope}>
+            <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All knowledge</SelectItem>
+              <SelectItem value="shared">Shared (all agents)</SelectItem>
+              {agents?.map((a) => (
+                <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <p className="text-xs text-muted-foreground flex-1">
+          {createAgentId
+            ? `New items are assigned to ${agentName(createAgentId)} only.`
+            : "New items are shared across all agents. Pick an agent to give it its own knowledge."}
+        </p>
+        <Dialog open={websiteOpen} onOpenChange={(v) => { setWebsiteOpen(v); if (!v) setWebsiteUrl(""); }}>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-2"><Globe className="w-4 h-4" />Learn from website</Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader><DialogTitle>Learn from a website</DialogTitle></DialogHeader>
+            <div className="space-y-4 pt-2">
+              <p className="text-sm text-muted-foreground">
+                We'll fetch the page, extract its text, and save it as an article{createAgentId ? ` for ${agentName(createAgentId)}` : " shared across all agents"} so the AI can use it.
+              </p>
+              <div className="space-y-2">
+                <Label>Website URL</Label>
+                <Input placeholder="https://example.com/about" value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} />
+              </div>
+              <Button
+                className="w-full gap-2"
+                disabled={importFromUrl.isPending || !websiteUrl.trim()}
+                onClick={() => {
+                  let url = websiteUrl.trim();
+                  if (!/^https?:\/\//i.test(url)) url = "https://" + url;
+                  importFromUrl.mutate({ url, agentId: createAgentId });
+                }}
+              >
+                {importFromUrl.isPending ? <><Loader2 className="w-4 h-4 animate-spin" />Importing…</> : <><Globe className="w-4 h-4" />Import content</>}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* Tabs */}
@@ -269,6 +346,12 @@ export default function KnowledgeBase() {
                           <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <p className="font-medium text-foreground text-sm">{article.title}</p>
                             <Badge variant="outline" className="text-xs capitalize">{article.category ?? "general"}</Badge>
+                            <Badge variant="secondary" className="text-xs gap-1">
+                              <Bot className="w-3 h-3" />{agentName((article as { agentId?: number | null }).agentId) ?? "Shared"}
+                            </Badge>
+                            {(article as { sourceUrl?: string | null }).sourceUrl && (
+                              <Badge variant="outline" className="text-xs gap-1"><Globe className="w-3 h-3" />Website</Badge>
+                            )}
                             <Badge className="text-xs bg-green-500/10 text-green-600 border-green-200">Ready</Badge>
                           </div>
                           <p className="text-xs text-muted-foreground line-clamp-2">{article.content}</p>
@@ -318,7 +401,12 @@ export default function KnowledgeBase() {
                           <HelpCircle className="w-4 h-4" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-foreground text-sm mb-1">{qa.question}</p>
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <p className="font-medium text-foreground text-sm">{qa.question}</p>
+                            <Badge variant="secondary" className="text-xs gap-1">
+                              <Bot className="w-3 h-3" />{agentName((qa as { agentId?: number | null }).agentId) ?? "Shared"}
+                            </Badge>
+                          </div>
                           <p className="text-xs text-muted-foreground line-clamp-2">{qa.answer}</p>
                         </div>
                       </div>

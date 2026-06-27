@@ -118,6 +118,26 @@ const agentRouter = router({
 });
 
 // ─── Knowledge Router ─────────────────────────────────────────────────────────
+// Strip an HTML document down to readable plain text for knowledge ingestion.
+function htmlToText(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<(br|\/p|\/div|\/h[1-6]|\/li|\/tr)\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/[ \t]+/g, " ")
+    .split("\n").map((l) => l.trim()).filter(Boolean).join("\n")
+    .trim();
+}
+
 const knowledgeRouter = router({
   listArticles: protectedProcedure.query(async ({ ctx }) => {
     const workspace = await db.getWorkspaceByUserId(ctx.user.id);
@@ -146,12 +166,52 @@ const knowledgeRouter = router({
       content: z.string().optional(),
       category: z.string().optional(),
       tags: z.array(z.string()).optional(),
+      agentId: z.number().optional().nullable(),
       imageUrl: z.string().optional().nullable(),
       status: z.enum(["indexing", "ready", "failed"]).optional(),
     }))
     .mutation(async ({ input }) => {
       const { id, ...data } = input;
       return db.updateArticle(id, data);
+    }),
+  importFromUrl: protectedProcedure
+    .input(z.object({
+      url: z.string().url(),
+      agentId: z.number().optional(),
+      category: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) throw new TRPCError({ code: "BAD_REQUEST" });
+      let html = "";
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15000);
+        const resp = await fetch(input.url, {
+          signal: controller.signal,
+          headers: { "User-Agent": "ChatBotPro-KnowledgeBot/1.0" },
+        });
+        clearTimeout(timer);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        html = await resp.text();
+      } catch {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Could not fetch that URL. Make sure it is public and reachable." });
+      }
+      const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+      const pageTitle = (titleMatch?.[1] || new URL(input.url).hostname).trim().slice(0, 200);
+      const text = htmlToText(html).slice(0, 12000);
+      if (text.length < 20) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "No readable text was found on that page." });
+      }
+      return db.createArticle({
+        workspaceId: workspace.id,
+        agentId: input.agentId,
+        title: pageTitle,
+        content: text,
+        category: input.category ?? "website",
+        sourceUrl: input.url,
+        status: "ready",
+      });
     }),
   deleteArticle: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
     await db.deleteArticle(input.id);
@@ -180,6 +240,7 @@ const knowledgeRouter = router({
       question: z.string().optional(),
       answer: z.string().optional(),
       category: z.string().optional(),
+      agentId: z.number().optional().nullable(),
     }))
     .mutation(async ({ input }) => {
       const { id, ...data } = input;

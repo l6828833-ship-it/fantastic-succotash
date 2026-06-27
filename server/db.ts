@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import {
@@ -166,6 +166,18 @@ export async function getArticleById(id: number) {
   return result[0];
 }
 
+// Articles available to a specific agent: those assigned to it, plus shared
+// articles (agentId IS NULL) that apply to every agent in the workspace.
+export async function getArticlesByAgent(workspaceId: number, agentId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(knowledgeArticles)
+    .where(and(eq(knowledgeArticles.workspaceId, workspaceId), or(eq(knowledgeArticles.agentId, agentId), isNull(knowledgeArticles.agentId))))
+    .orderBy(desc(knowledgeArticles.createdAt));
+}
+
 export async function createArticle(data: typeof knowledgeArticles.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
@@ -191,6 +203,18 @@ export async function getQAPairsByWorkspace(workspaceId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(qaPairs).where(eq(qaPairs.workspaceId, workspaceId)).orderBy(desc(qaPairs.createdAt));
+}
+
+// Q&A pairs available to a specific agent: those assigned to it, plus shared
+// pairs (agentId IS NULL) that apply to every agent in the workspace.
+export async function getQAPairsByAgent(workspaceId: number, agentId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(qaPairs)
+    .where(and(eq(qaPairs.workspaceId, workspaceId), or(eq(qaPairs.agentId, agentId), isNull(qaPairs.agentId))))
+    .orderBy(desc(qaPairs.createdAt));
 }
 
 export async function createQAPair(data: typeof qaPairs.$inferInsert) {
