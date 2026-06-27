@@ -1,6 +1,8 @@
 import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { readFileSync } from "fs";
+import path from "path";
 import {
   InsertUser,
   affiliates,
@@ -47,6 +49,65 @@ export async function getDb() {
     }
   }
   return _db;
+}
+
+// Apply the idempotent SQL in supabase/init.sql on startup so schema changes
+// (new tables / columns) are picked up by a normal deploy — no manual "run the
+// SQL in Supabase" step. The file is safe to re-run: every statement uses
+// IF NOT EXISTS, so existing data is untouched. Each statement runs
+// independently and failures are tolerated, so one bad statement can never
+// block the rest or crash the server.
+export async function runMigrations(): Promise<{ ok: number; failed: number } | null> {
+  if (!process.env.DATABASE_URL) {
+    console.warn("[Migrate] DATABASE_URL not set; skipping migrations");
+    return null;
+  }
+  await getDb(); // initialize the shared client
+  if (!_client) {
+    console.warn("[Migrate] No database client available; skipping migrations");
+    return null;
+  }
+  // process.cwd() is the app root (/app in the Docker image, repo root locally).
+  const candidates = [
+    path.join(process.cwd(), "supabase", "init.sql"),
+    path.join(process.cwd(), "..", "supabase", "init.sql"),
+  ];
+  let sqlText = "";
+  for (const candidate of candidates) {
+    try {
+      sqlText = readFileSync(candidate, "utf8");
+      if (sqlText) break;
+    } catch {
+      // try the next candidate path
+    }
+  }
+  if (!sqlText) {
+    console.warn("[Migrate] supabase/init.sql not found; skipping migrations");
+    return null;
+  }
+  // Drop full-line comments, then split into individual statements. init.sql
+  // contains plain DDL only (no functions/strings with semicolons), so a simple
+  // ";" split is safe.
+  const statements = sqlText
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("--"))
+    .join("\n")
+    .split(";")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  let ok = 0;
+  let failed = 0;
+  for (const stmt of statements) {
+    try {
+      await _client.unsafe(stmt);
+      ok++;
+    } catch (error) {
+      failed++;
+      console.warn("[Migrate] statement skipped:", (error as Error).message);
+    }
+  }
+  console.log(`[Migrate] Applied supabase/init.sql (${ok} statements ok, ${failed} skipped)`);
+  return { ok, failed };
 }
 
 // ─── Users ────────────────────────────────────────────────────────────────────
