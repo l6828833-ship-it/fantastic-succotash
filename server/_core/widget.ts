@@ -108,7 +108,7 @@ const WIDGET_JS = `(function(){
   input.placeholder = "Type a message...";
   var sendBtn = document.createElement("button");
   sendBtn.style.background = color;
-  sendBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>';
+  sendBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3.4 20.4l17.45-7.48a1 1 0 0 0 0-1.84L3.4 3.6a.993.993 0 0 0-1.39.91L2 9.12c0 .5.37.93.87.99L17 12 2.87 13.88c-.5.07-.87.5-.87 1l.01 4.61c0 .65.65 1.1 1.39.91z"/></svg>';
   foot.appendChild(input);
   foot.appendChild(sendBtn);
 
