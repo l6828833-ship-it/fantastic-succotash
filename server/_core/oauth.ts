@@ -4,6 +4,7 @@ import { parse as parseCookieHeader } from "cookie";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
+import { attributeReferral } from "./referral";
 import { ENV } from "./env";
 import { sdk } from "./sdk";
 
@@ -209,25 +210,17 @@ export function registerOAuthRoutes(app: Express) {
       });
 
       // Affiliate attribution: if this is a brand-new user who arrived via a
-      // referral link (?ref=CODE stored in the cbp_ref cookie), record a referral
-      // for the owning affiliate. Guarded against self-referral and re-runs.
-      const refCode = cookies["cbp_ref"];
-      if (!existingUser && refCode) {
-        try {
-          const affiliate = await db.getAffiliateByCode(refCode);
-          const newUser = await db.getUserByOpenId(openId);
-          if (affiliate && newUser && affiliate.userId !== newUser.id) {
-            await db.createReferral({
-              affiliateId: affiliate.id,
-              referredName: ghUser.name || ghUser.login,
-              referredEmail: email ?? null,
-              plan: "starter",
-              amount: 0,
-              status: "active",
-            });
-          }
-        } catch (referralError) {
-          console.error("[OAuth] referral attribution failed", referralError);
+      // referral link, record a referral for the owning affiliate (5-day window
+      // enforced inside the helper; guarded against self-referral and re-runs).
+      if (!existingUser) {
+        const newUser = await db.getUserByOpenId(openId);
+        if (newUser) {
+          await attributeReferral({
+            cookieHeader: req.headers.cookie,
+            userId: newUser.id,
+            name: ghUser.name || ghUser.login,
+            email: email ?? null,
+          });
         }
       }
       res.clearCookie("cbp_ref", { path: "/" });
