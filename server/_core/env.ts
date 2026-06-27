@@ -9,6 +9,9 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  // Use the OpenAI API directly when an OPENAI_API_KEY is provided. This takes
+  // priority over the built-in Forge gateway.
+  openaiApiKey: process.env.OPENAI_API_KEY ?? "",
 
   // GitHub OAuth (self-hosted login). Create an OAuth App at
   // https://github.com/settings/developers and set these in your environment.

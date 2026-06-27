@@ -1,9 +1,9 @@
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import {
-  Bot, Save, ArrowLeft, Play, Settings, Palette, Brain, Users, Clock, MessageSquare, Zap, Shield, Globe, ChevronRight,
+  Bot, Save, ArrowLeft, Play, Settings, Palette, Brain, Users, Clock, MessageSquare, Zap, Shield, Globe, ChevronRight, Upload, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -64,9 +64,13 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
     onSuccess: () => toast.success("Agent updated successfully"),
     onError: () => toast.error("Failed to update agent"),
   });
+  const getUploadUrl = trpc.upload.getUploadUrl.useMutation();
 
   // Form state
   const [name, setName] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [tone, setTone] = useState("professional");
   const [language, setLanguage] = useState("English");
   const [responseStyle, setResponseStyle] = useState("balanced");
@@ -100,6 +104,7 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
   useEffect(() => {
     if (agent) {
       setName(agent.name ?? "");
+      setAvatarUrl(agent.avatarUrl ?? null);
       setTone(agent.tone ?? "professional");
       setLanguage(agent.language ?? "English");
       setResponseStyle(agent.responseStyle ?? "balanced");
@@ -128,7 +133,8 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
   const handleSave = () => {
     updateAgent.mutate({
       id: agentId,
-      name, tone: tone as "formal" | "friendly" | "professional" | "casual" | "empathetic",
+      name, avatarUrl,
+      tone: tone as "formal" | "friendly" | "professional" | "casual" | "empathetic",
       language, responseStyle: responseStyle as "conservative" | "balanced" | "creative",
       maxResponseLength: maxResponseLength as "short" | "medium" | "long",
       systemPrompt, fallbackMessage, welcomeMessage,
@@ -144,6 +150,28 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
 
   const toggleTrigger = (t: string) => {
     setEscalationTriggers((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]);
+  };
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) { toast.error("Please choose an image file"); return; }
+    if (file.size > 5 * 1024 * 1024) { toast.error("Image too large. Max 5MB."); return; }
+    setIsUploading(true);
+    try {
+      const { key, uploadEndpoint } = await getUploadUrl.mutateAsync({ filename: file.name, contentType: file.type, folder: "agent-avatars" });
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(uploadEndpoint, { method: "POST", body: formData });
+      if (!res.ok) throw new Error("Upload failed");
+      setAvatarUrl(`/manus-storage/${key}`);
+      toast.success("Icon uploaded — click Save Changes to apply");
+    } catch {
+      toast.error("Upload failed");
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
   };
 
   if (isLoading) {
@@ -219,6 +247,29 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
                 <CardDescription className="text-xs">Define how your agent presents itself</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-sm">Agent Icon</Label>
+                  <div className="flex items-center gap-3">
+                    <div className="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center overflow-hidden shrink-0 border border-border">
+                      {avatarUrl ? (
+                        <img src={avatarUrl} alt="Agent icon" className="w-full h-full object-cover" />
+                      ) : (
+                        <Bot className="w-6 h-6 text-primary" />
+                      )}
+                    </div>
+                    <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+                    <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => fileInputRef.current?.click()} disabled={isUploading}>
+                      {isUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                      {avatarUrl ? "Change" : "Upload"}
+                    </Button>
+                    {avatarUrl && (
+                      <Button type="button" variant="ghost" size="sm" className="text-muted-foreground hover:text-destructive" onClick={() => setAvatarUrl(null)}>
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">PNG, JPG or GIF (max 5MB). Shown to customers in the chat widget.</p>
+                </div>
                 <div className="space-y-2">
                   <Label className="text-sm">Agent Name</Label>
                   <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Support Assistant" />

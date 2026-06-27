@@ -18,20 +18,18 @@ interface Message { role: string; content: string; }
 export default function Playground({ agentId }: PlaygroundProps) {
   const { data: agent } = trpc.agent.get.useQuery({ id: agentId });
   const { data: session, refetch: refetchSession } = trpc.playground.getSession.useQuery({ agentId });
-  const { data: models } = trpc.playground.listModels.useQuery();
   const sendMessage = trpc.playground.sendMessage.useMutation();
   const resetSession = trpc.playground.resetSession.useMutation({ onSuccess: () => { refetchSession(); toast.success("Conversation reset"); } });
   const updateSettings = trpc.playground.updateSettings.useMutation({ onSuccess: () => refetchSession() });
 
   const [input, setInput] = useState("");
-  const [model, setModel] = useState("gpt-4o-mini");
+  const model = "gpt-4o-mini";
   const [guidance, setGuidance] = useState<"conservative" | "balanced" | "creative">("balanced");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const messages: Message[] = (session?.messages as Message[]) ?? [];
 
   useEffect(() => {
-    if (session?.model) setModel(session.model);
     if (session?.answerGuidance) setGuidance(session.answerGuidance as "conservative" | "balanced" | "creative");
   }, [session]);
 
@@ -55,12 +53,9 @@ export default function Playground({ agentId }: PlaygroundProps) {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
   };
 
-  const handleSettingsChange = (newModel?: string, newGuidance?: string) => {
-    const m = newModel ?? model;
-    const g = newGuidance ?? guidance;
-    setModel(m);
-    if (newGuidance) setGuidance(g as "conservative" | "balanced" | "creative");
-    updateSettings.mutate({ agentId, model: m, answerGuidance: g as "conservative" | "balanced" | "creative" });
+  const handleGuidanceChange = (newGuidance: "conservative" | "balanced" | "creative") => {
+    setGuidance(newGuidance);
+    updateSettings.mutate({ agentId, model, answerGuidance: newGuidance });
   };
 
   return (
@@ -104,20 +99,6 @@ export default function Playground({ agentId }: PlaygroundProps) {
 
             <div className="space-y-3">
               <div className="space-y-1.5">
-                <label className="text-xs font-medium text-foreground">AI Model</label>
-                <Select value={model} onValueChange={(v) => handleSettingsChange(v)}>
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(models ?? ["gpt-4o-mini", "gpt-4o"]).map((m) => (
-                      <SelectItem key={m} value={m} className="text-xs">{m}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
                 <label className="text-xs font-medium text-foreground">Answer Guidance</label>
                 <div className="space-y-1.5">
                   {[
@@ -127,7 +108,7 @@ export default function Playground({ agentId }: PlaygroundProps) {
                   ].map((g) => (
                     <button
                       key={g.id}
-                      onClick={() => handleSettingsChange(undefined, g.id)}
+                      onClick={() => handleGuidanceChange(g.id as "conservative" | "balanced" | "creative")}
                       className={cn(
                         "w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs border transition-all",
                         guidance === g.id ? "border-primary bg-primary/5 text-primary" : "border-border text-foreground hover:bg-accent/30"
