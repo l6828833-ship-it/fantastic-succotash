@@ -28,13 +28,11 @@ export default function EmbedCode() {
 
   const scriptTag = selectedAgent
     ? `<!-- ChatBot Pro Widget -->
+<!-- Appearance (color, position, size, theme) is managed in Agent Settings
+     and applied automatically — no need to edit or re-copy this snippet. -->
 <script>
   window.ChatBotProConfig = {
     agentId: "${selectedAgent.id}",
-    color: "${selectedAgent.widgetColor ?? "#6366f1"}",
-    position: "${selectedAgent.widgetPosition ?? "bottom-right"}",
-    size: "${selectedAgent.widgetSize ?? "standard"}",
-    theme: "${selectedAgent.widgetTheme ?? "light"}",
     apiBase: "${origin}/api",
   };
 </script>
@@ -52,12 +50,8 @@ export default function App() {
   return (
     <>
       {/* Your app content */}
-      <ChatBotProWidget
-        agentId="${selectedAgent.id}"
-        color="${selectedAgent.widgetColor ?? "#6366f1"}"
-        position="${selectedAgent.widgetPosition ?? "bottom-right"}"
-        theme="${selectedAgent.widgetTheme ?? "light"}"
-      />
+      {/* Appearance is managed in Agent Settings and applied automatically. */}
+      <ChatBotProWidget agentId="${selectedAgent.id}" />
     </>
   );
 }`
@@ -65,14 +59,13 @@ export default function App() {
 
   const wordpressSnippet = selectedAgent
     ? `// Add to your WordPress theme's functions.php
+// Appearance (color, position, size, theme) is managed in Agent Settings
+// and applied automatically — no need to edit or re-copy this snippet.
 function chatbotpro_widget() {
     ?>
     <script>
       window.ChatBotProConfig = {
         agentId: "<?php echo esc_js('${selectedAgent.id}'); ?>",
-        color: "<?php echo esc_js('${selectedAgent.widgetColor ?? "#6366f1"}'); ?>",
-        position: "<?php echo esc_js('${selectedAgent.widgetPosition ?? "bottom-right"}'); ?>",
-        theme: "<?php echo esc_js('${selectedAgent.widgetTheme ?? "light"}'); ?>",
         apiBase: "${origin}/api",
       };
     </script>
