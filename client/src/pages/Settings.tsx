@@ -3,7 +3,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { useState, useEffect } from "react";
 import {
   Building2, Bell, Puzzle, CreditCard, User, Save, Check, Globe, Users, Mail,
-  Zap, Shield, ChevronRight, AlertCircle, CheckCircle2, ExternalLink,
+  Zap, Shield, ChevronRight, AlertCircle, CheckCircle2, ExternalLink, Plus, Trash2, UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -67,6 +67,27 @@ export default function Settings() {
   const [notifEmail, setNotifEmail] = useState(true);
 
   const { data: workspace, refetch } = trpc.workspace.get.useQuery();
+  const utils = trpc.useUtils();
+
+  // Team members
+  const { data: team = [] } = trpc.team.list.useQuery();
+  const [tmName, setTmName] = useState("");
+  const [tmEmail, setTmEmail] = useState("");
+  const [tmRole, setTmRole] = useState<"admin" | "agent">("agent");
+  const addMember = trpc.team.create.useMutation({
+    onSuccess: () => { utils.team.list.invalidate(); setTmName(""); setTmEmail(""); setTmRole("agent"); toast.success("Team member added"); },
+    onError: () => toast.error("Failed to add team member"),
+  });
+  const removeMember = trpc.team.delete.useMutation({
+    onSuccess: () => utils.team.list.invalidate(),
+    onError: () => toast.error("Failed to remove team member"),
+  });
+
+  const handleAddMember = () => {
+    if (!tmName.trim() || !tmEmail.trim()) { toast.error("Name and email are required"); return; }
+    addMember.mutate({ name: tmName, email: tmEmail, role: tmRole });
+  };
+
   const updateWorkspace = trpc.workspace.update.useMutation({
     onSuccess: () => {
       refetch();
@@ -103,6 +124,7 @@ export default function Settings() {
         <nav className="flex-1 p-2 space-y-0.5">
           {[
             { id: "workspace", label: "Workspace", icon: Building2 },
+            { id: "team", label: "Team", icon: Users },
             { id: "account", label: "My Account", icon: User },
             { id: "notifications", label: "Notifications", icon: Bell },
             { id: "integrations", label: "Integrations", icon: Puzzle },
@@ -202,6 +224,96 @@ export default function Settings() {
                 {saved ? "Saved!" : updateWorkspace.isPending ? "Saving..." : "Save Changes"}
               </Button>
             </div>
+          </div>
+        )}
+
+        {/* Team Members */}
+        {activeTab === "team" && (
+          <div className="p-6 max-w-2xl space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold text-foreground">Team Members</h3>
+              <p className="text-sm text-muted-foreground mt-1">Add the human agents on your team so they can handle conversations and tickets.</p>
+            </div>
+
+            <Card className="border-border">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base flex items-center gap-2"><UserPlus className="w-4 h-4" />Invite a teammate</CardTitle>
+                <CardDescription>They'll appear in your team list and can be assigned to tickets.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-2 sm:col-span-1">
+                    <Label>Name</Label>
+                    <Input value={tmName} onChange={(e) => setTmName(e.target.value)} placeholder="Jane Doe" />
+                  </div>
+                  <div className="space-y-2 sm:col-span-1">
+                    <Label>Email</Label>
+                    <Input value={tmEmail} onChange={(e) => setTmEmail(e.target.value)} placeholder="jane@company.com" />
+                  </div>
+                  <div className="space-y-2 sm:col-span-1">
+                    <Label>Role</Label>
+                    <Select value={tmRole} onValueChange={(v) => setTmRole(v as "admin" | "agent")}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="agent">Agent</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="flex justify-end">
+                  <Button onClick={handleAddMember} disabled={addMember.isPending} className="gap-2">
+                    <Plus className="w-4 h-4" />{addMember.isPending ? "Adding..." : "Add Member"}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base">Your Team ({team.length + 1})</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {/* Owner (current user) */}
+                <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-muted/20">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary">
+                      {user?.name?.charAt(0)?.toUpperCase() ?? "U"}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{user?.name ?? "You"}</p>
+                      <p className="text-xs text-muted-foreground">{user?.email}</p>
+                    </div>
+                  </div>
+                  <Badge className="bg-primary/10 text-primary border-primary/20">Owner</Badge>
+                </div>
+
+                {team.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">No other team members yet. Invite your first teammate above.</p>
+                ) : (
+                  team.map((m) => (
+                    <div key={m.id} className="flex items-center justify-between p-3 rounded-lg border border-border group">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-secondary flex items-center justify-center text-sm font-semibold text-secondary-foreground">
+                          {(m.name ?? m.email ?? "?").charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-foreground">{m.name}</p>
+                          <p className="text-xs text-muted-foreground">{m.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs capitalize">{m.role}</Badge>
+                        <Badge variant="secondary" className="text-xs capitalize">{m.status}</Badge>
+                        <Button size="icon" variant="ghost" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => removeMember.mutate({ id: m.id })}>
+                          <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
           </div>
         )}
 

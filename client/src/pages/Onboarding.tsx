@@ -75,6 +75,7 @@ export default function Onboarding() {
 
   const updateWorkspace = trpc.workspace.update.useMutation();
   const createAgent = trpc.agent.create.useMutation();
+  const utils = trpc.useUtils();
 
   const canProceed = () => {
     if (step === 1) return !!industry;
@@ -90,7 +91,7 @@ export default function Onboarding() {
 
   const handleFinish = async () => {
     try {
-      await updateWorkspace.mutateAsync({
+      const updated = await updateWorkspace.mutateAsync({
         industry,
         companySize,
         companyName,
@@ -101,20 +102,41 @@ export default function Onboarding() {
         onboardingStep: 5,
       });
 
-      // Create a default agent based on industry
+      // Push the updated workspace straight into the query cache so the app
+      // transitions to the dashboard instantly (no refetch wait).
+      if (updated) utils.workspace.get.setData(undefined, updated);
+      toast.success("Welcome aboard! Your workspace is ready.");
+      navigate("/");
+
+      // Create a default agent in the background — don't block the redirect.
       const industryLabel = INDUSTRIES.find((i) => i.id === industry)?.label ?? "General";
-      await createAgent.mutateAsync({
-        name: `${companyName} Assistant`,
+      createAgent.mutate({
+        name: `${companyName || "My"} Assistant`,
         tone: "professional",
         language: "English",
         responseStyle: "balanced",
         handoffMode: selectedFeatures.includes("human_support") ? "ai_first_human_escalation" : "ai_only",
-        welcomeMessage: `Hi! I'm the ${companyName} AI assistant. How can I help you today?`,
-        systemPrompt: `You are a helpful AI assistant for ${companyName}, a company in the ${industryLabel} industry. Be professional, helpful, and concise in your responses.`,
+        welcomeMessage: `Hi! I'm the ${companyName || "support"} AI assistant. How can I help you today?`,
+        systemPrompt: `You are a helpful AI assistant for ${companyName || "our company"}, a company in the ${industryLabel} industry. Be professional, helpful, and concise in your responses.`,
         fallbackMessage: "I'm sorry, I don't have information about that. Let me connect you with a human agent.",
       });
+    } catch (err) {
+      toast.error("Something went wrong. Please try again.");
+    }
+  };
 
-      toast.success("Welcome aboard! Your workspace is ready.");
+  const handleSkip = async () => {
+    try {
+      const updated = await updateWorkspace.mutateAsync({
+        companyName: companyName || "My Company",
+        industry: industry || undefined,
+        companySize: companySize || undefined,
+        features: selectedFeatures.length > 0 ? selectedFeatures : ["ai_agent"],
+        plan,
+        onboardingCompleted: true,
+        onboardingStep: 5,
+      });
+      if (updated) utils.workspace.get.setData(undefined, updated);
       navigate("/");
     } catch (err) {
       toast.error("Something went wrong. Please try again.");
@@ -131,9 +153,19 @@ export default function Onboarding() {
           </div>
           <span className="font-bold text-foreground">ChatBot Pro</span>
         </div>
-        <span className="text-sm text-muted-foreground">Step {step} of {steps.length}</span>
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-muted-foreground">Step {step} of {steps.length}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs text-muted-foreground hover:text-foreground"
+            onClick={handleSkip}
+            disabled={updateWorkspace.isPending}
+          >
+            Skip for now
+          </Button>
+        </div>
       </div>
-
       {/* Step indicators */}
       <div className="flex items-center justify-center gap-2 py-6 px-4">
         {steps.map((s, i) => (

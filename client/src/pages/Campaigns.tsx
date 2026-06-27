@@ -11,14 +11,15 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CHANNELS } from "@/lib/channels";
 import { toast } from "sonner";
 
 const STATUS_CONFIG = {
   draft: { label: "Draft", color: "text-slate-600 bg-slate-100" },
   scheduled: { label: "Scheduled", color: "text-blue-600 bg-blue-100" },
-  sending: { label: "Sending", color: "text-orange-600 bg-orange-100" },
-  sent: { label: "Sent", color: "text-green-600 bg-green-100" },
-  failed: { label: "Failed", color: "text-red-600 bg-red-100" },
+  running: { label: "Running", color: "text-orange-600 bg-orange-100" },
+  completed: { label: "Completed", color: "text-green-600 bg-green-100" },
+  paused: { label: "Paused", color: "text-amber-600 bg-amber-100" },
 };
 
 export default function Campaigns() {
@@ -27,11 +28,12 @@ export default function Campaigns() {
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const [type, setType] = useState<"broadcast" | "drip">("broadcast");
-  const [channel, setChannel] = useState("chat");
+  const [channel, setChannel] = useState("web");
   const [scheduledAt, setScheduledAt] = useState("");
   const [selectedCampaign, setSelectedCampaign] = useState<number | null>(null);
 
   const { data: campaigns, refetch } = trpc.campaigns.list.useQuery();
+  const { data: contactStats } = trpc.contacts.stats.useQuery();
   const createCampaign = trpc.campaigns.create.useMutation({
     onSuccess: () => { refetch(); setOpen(false); setName(""); setMessage(""); toast.success("Campaign created!"); },
     onError: () => toast.error("Failed to create campaign"),
@@ -85,13 +87,20 @@ export default function Campaigns() {
                       <Select value={channel} onValueChange={setChannel}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="chat">Chat</SelectItem>
-                          <SelectItem value="email">Email</SelectItem>
-                          <SelectItem value="whatsapp">WhatsApp</SelectItem>
-                          <SelectItem value="sms">SMS</SelectItem>
+                          {CHANNELS.map((c) => (
+                            <SelectItem key={c.id} value={c.id} disabled={!c.available}>
+                              {c.icon} {c.label}{!c.available ? " (coming soon)" : ""}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
+                  </div>
+                  <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 flex items-center gap-2">
+                    <Users className="w-4 h-4 text-primary shrink-0" />
+                    <p className="text-xs text-muted-foreground">
+                      Audience: <span className="font-medium text-foreground">{contactStats?.subscribed ?? 0} subscribed contacts</span> will receive this campaign.
+                    </p>
                   </div>
                   <div className="space-y-2">
                     <Label>Message</Label>
@@ -118,19 +127,25 @@ export default function Campaigns() {
             <TabsList className="grid grid-cols-3 w-full h-8">
               <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
               <TabsTrigger value="draft" className="text-xs">Draft</TabsTrigger>
-              <TabsTrigger value="sent" className="text-xs">Sent</TabsTrigger>
+              <TabsTrigger value="completed" className="text-xs">Sent</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {!campaigns || campaigns.length === 0 ? (
+          {(() => {
+            const visible = (campaigns ?? []).filter((c) =>
+              statusFilter === "all" ? true : statusFilter === "completed"
+                ? c.status === "completed" || c.status === "running"
+                : c.status === statusFilter
+            );
+            return !visible || visible.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center p-6">
               <Megaphone className="w-8 h-8 text-muted-foreground/30 mb-2" />
               <p className="text-sm text-muted-foreground">No campaigns yet</p>
             </div>
           ) : (
-            campaigns.map((campaign) => {
+            visible.map((campaign) => {
               const status = STATUS_CONFIG[campaign.status as keyof typeof STATUS_CONFIG];
               return (
                 <button
@@ -154,7 +169,8 @@ export default function Campaigns() {
                 </button>
               );
             })
-          )}
+          );
+          })()}
         </div>
       </div>
 

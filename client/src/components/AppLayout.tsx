@@ -20,6 +20,7 @@ import {
   Settings,
   Sun,
   Ticket,
+  Users,
   X,
 } from "lucide-react";
 import { useState } from "react";
@@ -40,6 +41,7 @@ const navItems = [
   { href: "/agents", icon: Bot, label: "AI Agents" },
   { href: "/inbox", icon: Inbox, label: "Inbox" },
   { href: "/tickets", icon: Ticket, label: "Tickets" },
+  { href: "/contacts", icon: Users, label: "Contacts" },
   { href: "/campaigns", icon: Megaphone, label: "Campaigns" },
   { href: "/knowledge", icon: BookOpen, label: "Knowledge Base" },
   { href: "/analytics", icon: BarChart3, label: "Analytics" },

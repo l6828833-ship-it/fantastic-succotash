@@ -261,3 +261,39 @@ export const playgroundSessions = pgTable("playground_sessions", {
 });
 
 export type PlaygroundSession = typeof playgroundSessions.$inferSelect;
+
+
+// ─── Contacts ─────────────────────────────────────────────────────────────────
+export const contacts = pgTable("contacts", {
+  id: serial("id").primaryKey(),
+  workspaceId: integer("workspaceId").notNull(),
+  name: varchar("name", { length: 255 }),
+  email: varchar("email", { length: 320 }),
+  phone: varchar("phone", { length: 64 }),
+  company: varchar("company", { length: 255 }),
+  channel: varchar("channel", { length: 64 }).default("web"),
+  tags: jsonb("tags").$type<string[]>(),
+  notes: text("notes"),
+  subscribed: boolean("subscribed").default(true),
+  lastSeenAt: ts("lastSeenAt"),
+  createdAt: ts("createdAt").defaultNow().notNull(),
+  updatedAt: ts("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+export type Contact = typeof contacts.$inferSelect;
+export type InsertContact = typeof contacts.$inferInsert;
+
+// ─── Team Members ─────────────────────────────────────────────────────────────
+export const teamMembers = pgTable("team_members", {
+  id: serial("id").primaryKey(),
+  workspaceId: integer("workspaceId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  role: text("role").$type<"owner" | "admin" | "agent">().default("agent"),
+  status: text("status").$type<"active" | "invited">().default("invited"),
+  createdAt: ts("createdAt").defaultNow().notNull(),
+  updatedAt: ts("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+export type TeamMember = typeof teamMembers.$inferSelect;
+export type InsertTeamMember = typeof teamMembers.$inferInsert;

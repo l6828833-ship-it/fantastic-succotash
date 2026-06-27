@@ -329,6 +329,7 @@ const ticketsRouter = router({
       status: z.enum(["open", "in-progress", "closed"]).optional(),
       priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
       assignedUserId: z.number().optional().nullable(),
+      conversationId: z.number().optional().nullable(),
       tags: z.array(z.string()).optional(),
     }))
     .mutation(async ({ input }) => {
@@ -393,6 +394,94 @@ const cannedResponsesRouter = router({
     }),
   delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
     await db.deleteCannedResponse(input.id);
+    return { success: true };
+  }),
+});
+
+// ─── Contacts Router ──────────────────────────────────────────────────────────
+const contactsRouter = router({
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) return [];
+    return db.getContactsByWorkspace(workspace.id);
+  }),
+  stats: protectedProcedure.query(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) return { total: 0, subscribed: 0, active30d: 0, openTickets: 0 };
+    return db.getContactStats(workspace.id);
+  }),
+  get: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
+    return db.getContactById(input.id);
+  }),
+  create: protectedProcedure
+    .input(z.object({
+      name: z.string().optional(),
+      email: z.string().optional(),
+      phone: z.string().optional(),
+      company: z.string().optional(),
+      channel: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      notes: z.string().optional(),
+      subscribed: z.boolean().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) throw new TRPCError({ code: "BAD_REQUEST", message: "No workspace found" });
+      return db.createContact({ ...input, workspaceId: workspace.id, lastSeenAt: new Date() });
+    }),
+  update: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      name: z.string().optional().nullable(),
+      email: z.string().optional().nullable(),
+      phone: z.string().optional().nullable(),
+      company: z.string().optional().nullable(),
+      channel: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+      notes: z.string().optional().nullable(),
+      subscribed: z.boolean().optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      return db.updateContact(id, data);
+    }),
+  delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    await db.deleteContact(input.id);
+    return { success: true };
+  }),
+});
+
+// ─── Team Router ──────────────────────────────────────────────────────────────
+const teamRouter = router({
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) return [];
+    return db.getTeamMembersByWorkspace(workspace.id);
+  }),
+  create: protectedProcedure
+    .input(z.object({
+      name: z.string().min(1),
+      email: z.string().email(),
+      role: z.enum(["owner", "admin", "agent"]).optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) throw new TRPCError({ code: "BAD_REQUEST", message: "No workspace found" });
+      return db.createTeamMember({ ...input, workspaceId: workspace.id, status: "invited" });
+    }),
+  update: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      name: z.string().optional(),
+      role: z.enum(["owner", "admin", "agent"]).optional(),
+      status: z.enum(["active", "invited"]).optional(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      return db.updateTeamMember(id, data);
+    }),
+  delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    await db.deleteTeamMember(input.id);
     return { success: true };
   }),
 });
@@ -611,6 +700,8 @@ export const appRouter = router({
   inbox: inboxRouter,
   tickets: ticketsRouter,
   cannedResponses: cannedResponsesRouter,
+  contacts: contactsRouter,
+  team: teamRouter,
   campaigns: campaignsRouter,
   analytics: analyticsRouter,
   notifications: notificationsRouter,

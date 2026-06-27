@@ -211,3 +211,31 @@ CREATE TABLE IF NOT EXISTS "playground_sessions" (
   "createdAt" timestamptz NOT NULL DEFAULT now(),
   "updatedAt" timestamptz NOT NULL DEFAULT now()
 );
+
+
+CREATE TABLE IF NOT EXISTS "contacts" (
+  "id" serial PRIMARY KEY,
+  "workspaceId" integer NOT NULL,
+  "name" varchar(255),
+  "email" varchar(320),
+  "phone" varchar(64),
+  "company" varchar(255),
+  "channel" varchar(64) DEFAULT 'web',
+  "tags" jsonb,
+  "notes" text,
+  "subscribed" boolean DEFAULT true,
+  "lastSeenAt" timestamptz,
+  "createdAt" timestamptz NOT NULL DEFAULT now(),
+  "updatedAt" timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "team_members" (
+  "id" serial PRIMARY KEY,
+  "workspaceId" integer NOT NULL,
+  "name" varchar(255) NOT NULL,
+  "email" varchar(320) NOT NULL,
+  "role" text DEFAULT 'agent',
+  "status" text DEFAULT 'invited',
+  "createdAt" timestamptz NOT NULL DEFAULT now(),
+  "updatedAt" timestamptz NOT NULL DEFAULT now()
+);
