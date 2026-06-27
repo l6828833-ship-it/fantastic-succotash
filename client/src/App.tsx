@@ -17,6 +17,7 @@ import KnowledgeBase from "./pages/KnowledgeBase";
 import Analytics from "./pages/Analytics";
 import EmbedCode from "./pages/EmbedCode";
 import Affiliate from "./pages/Affiliate";
+import Admin from "./pages/Admin";
 import Login from "./pages/Login";
 import Settings from "./pages/Settings";
 import AppLayout from "./components/AppLayout";
@@ -171,6 +172,15 @@ function Router() {
           <OnboardingGate>
             <AppLayout>
               <Affiliate />
+            </AppLayout>
+          </OnboardingGate>
+        </AuthGate>
+      )} />
+      <Route path="/admin" component={() => (
+        <AuthGate>
+          <OnboardingGate>
+            <AppLayout>
+              <Admin />
             </AppLayout>
           </OnboardingGate>
         </AuthGate>

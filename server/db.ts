@@ -815,3 +815,42 @@ export async function searchWorkspace(workspaceId: number, q: string): Promise<S
 
   return out;
 }
+
+
+// ─── Platform admin (super-admin across all workspaces) ───────────────────────
+export async function getAllUsers(limit = 500) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(users).orderBy(desc(users.createdAt)).limit(limit);
+}
+
+export async function updateUserRole(id: number, role: "user" | "admin") {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.update(users).set({ role }).where(eq(users.id, id)).returning();
+  return row;
+}
+
+export async function getAllWorkspaces(limit = 500) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(workspaces).orderBy(desc(workspaces.createdAt)).limit(limit);
+}
+
+export async function getPlatformStats() {
+  const db = await getDb();
+  const empty = { users: 0, workspaces: 0, agents: 0, conversations: 0, tickets: 0, contacts: 0 };
+  if (!db) return empty;
+  const one = async (table: typeof users | typeof workspaces | typeof agents | typeof conversations | typeof tickets | typeof contacts) => {
+    const r = await db.select({ c: sql<number>`count(*)` }).from(table);
+    return Number(r[0]?.c ?? 0);
+  };
+  return {
+    users: await one(users),
+    workspaces: await one(workspaces),
+    agents: await one(agents),
+    conversations: await one(conversations),
+    tickets: await one(tickets),
+    contacts: await one(contacts),
+  };
+}
