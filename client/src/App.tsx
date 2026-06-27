@@ -39,34 +39,11 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
-    const loginUrl = getLoginUrl();
-    if (loginUrl) {
-      window.location.href = loginUrl;
-      return null;
-    }
-    return <LoginUnavailable />;
+    window.location.href = getLoginUrl();
+    return null;
   }
 
   return <>{children}</>;
-}
-
-function LoginUnavailable() {
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-6">
-      <div className="max-w-md text-center space-y-3">
-        <div className="w-12 h-12 rounded-xl bg-destructive/10 flex items-center justify-center mx-auto">
-          <Loader2 className="w-6 h-6 text-destructive" />
-        </div>
-        <h1 className="text-lg font-semibold text-foreground">Login is not configured</h1>
-        <p className="text-sm text-muted-foreground">
-          This deployment is missing its authentication settings. Set the build-time
-          environment variables <code className="font-mono text-foreground">VITE_OAUTH_PORTAL_URL</code> and{" "}
-          <code className="font-mono text-foreground">VITE_APP_ID</code> (plus the matching server-side
-          variables), then rebuild and redeploy.
-        </p>
-      </div>
-    </div>
-  );
 }
 
 function OnboardingGate({ children }: { children: React.ReactNode }) {
