@@ -206,6 +206,7 @@ export const campaigns = pgTable("campaigns", {
   agentId: integer("agentId"),
   name: varchar("name", { length: 255 }).notNull(),
   type: text("type").$type<"broadcast" | "drip">().default("broadcast"),
+  subject: varchar("subject", { length: 512 }),
   message: text("message").notNull(),
   targetSegment: jsonb("targetSegment").$type<Record<string, string>>(),
   targetUrlPattern: varchar("targetUrlPattern", { length: 512 }),

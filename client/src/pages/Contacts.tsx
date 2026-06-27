@@ -4,7 +4,7 @@ import { CHANNELS, getChannelIcon, getChannelLabel } from "@/lib/channels";
 import { useMemo, useState } from "react";
 import {
   Users, Search, Plus, X, Trash2, Mail, Phone, Building2, Tag,
-  UserCheck, Activity, Ticket as TicketIcon, Loader2, Save,
+  UserCheck, Activity, Ticket as TicketIcon, Loader2, Save, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,6 +55,7 @@ export default function Contacts() {
   const [search, setSearch] = useState("");
   const [channelFilter, setChannelFilter] = useState("all");
   const [tagFilter, setTagFilter] = useState("all");
+  const [subFilter, setSubFilter] = useState("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
@@ -86,7 +87,7 @@ export default function Contacts() {
       setNName(""); setNEmail(""); setNPhone(""); setNCompany(""); setNChannel("web");
       toast.success("Contact added");
     },
-    onError: () => toast.error("Failed to add contact"),
+    onError: (e) => toast.error(e.message || "Failed to add contact"),
   });
   const updateContact = trpc.contacts.update.useMutation({
     onSuccess: () => { utils.contacts.list.invalidate(); toast.success("Contact updated"); },
@@ -112,7 +113,8 @@ export default function Contacts() {
     const matchChannel = channelFilter === "all" || c.channel === channelFilter;
     const tags = Array.isArray(c.tags) ? (c.tags as string[]) : [];
     const matchTag = tagFilter === "all" || tags.includes(tagFilter);
-    return matchSearch && matchChannel && matchTag;
+    const matchSub = subFilter === "all" || (subFilter === "subscribed" ? !!c.subscribed : !c.subscribed);
+    return matchSearch && matchChannel && matchTag && matchSub;
   });
 
   const openDetail = (c: ContactRow) => {
@@ -150,6 +152,39 @@ export default function Contacts() {
 
   const fmtDate = (d?: Date | string | null) => (d ? new Date(d).toLocaleDateString() : "—");
 
+  // Plan contact cap (null = unlimited). Used to gate "Add Contact".
+  const limit = (stats as { limit?: number | null } | undefined)?.limit ?? null;
+  const atLimit = limit != null && (stats?.total ?? 0) >= limit;
+
+  // Export the currently filtered/targeted contacts as CSV so the user can take
+  // their segmented audience into their own email tool.
+  const exportCsv = () => {
+    if (filtered.length === 0) { toast.error("No contacts to export"); return; }
+    const headers = ["Name", "Email", "Phone", "Company", "Channel", "Subscribed", "Tags", "Last Seen", "Created"];
+    const esc = (v: unknown) => {
+      const s = String(v ?? "");
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [headers.join(",")];
+    filtered.forEach((c) => {
+      const tags = Array.isArray(c.tags) ? (c.tags as string[]).join("; ") : "";
+      lines.push([
+        c.name, c.email, c.phone, c.company, c.channel,
+        c.subscribed ? "yes" : "no", tags,
+        c.lastSeenAt ? new Date(c.lastSeenAt).toISOString() : "",
+        new Date(c.createdAt).toISOString(),
+      ].map(esc).join(","));
+    });
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `contacts-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${filtered.length} contact${filtered.length === 1 ? "" : "s"}`);
+  };
+
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header + stats */}
@@ -157,14 +192,19 @@ export default function Contacts() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold text-foreground">Contacts</h1>
-            <p className="text-xs text-muted-foreground">Everyone who has talked to your bots, opened tickets, or received campaigns</p>
+            <p className="text-xs text-muted-foreground">Collect leads from your bots, segment them with filters, and export to use in any email tool</p>
           </div>
-          <Button size="sm" className="gap-1.5 h-8" onClick={() => setShowCreate(true)}>
-            <Plus className="w-3.5 h-3.5" />Add Contact
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={exportCsv} disabled={filtered.length === 0}>
+              <Download className="w-3.5 h-3.5" />Export CSV
+            </Button>
+            <Button size="sm" className="gap-1.5 h-8" onClick={() => setShowCreate(true)} disabled={atLimit} title={atLimit ? "You've reached your plan's contact limit" : undefined}>
+              <Plus className="w-3.5 h-3.5" />Add Contact
+            </Button>
+          </div>
         </div>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard label="Total contacts" value={stats?.total ?? 0} sub="all time" icon={Users} />
+          <StatCard label="Total contacts" value={stats?.total ?? 0} sub={limit != null ? `${stats?.total ?? 0} of ${limit} limit` : "unlimited"} icon={Users} />
           <StatCard label="Subscribed" value={stats?.subscribed ?? 0} sub={stats?.total ? `${Math.round(((stats.subscribed ?? 0) / stats.total) * 100)}% opt-in` : "—"} icon={UserCheck} />
           <StatCard label="Active (30d)" value={stats?.active30d ?? 0} sub="had a conversation" icon={Activity} />
           <StatCard label="Open tickets" value={stats?.openTickets ?? 0} sub="across all contacts" icon={TicketIcon} />
@@ -196,6 +236,14 @@ export default function Contacts() {
                 {allTags.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
               </SelectContent>
             </Select>
+            <Select value={subFilter} onValueChange={setSubFilter}>
+              <SelectTrigger className="w-full sm:w-40 h-9 text-sm"><SelectValue placeholder="Status" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All statuses</SelectItem>
+                <SelectItem value="subscribed">Subscribed</SelectItem>
+                <SelectItem value="unsubscribed">Unsubscribed</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Table */}
@@ -206,7 +254,7 @@ export default function Contacts() {
               <div className="flex flex-col items-center justify-center py-16 text-center px-4">
                 <div className="w-12 h-12 rounded-full bg-muted/50 flex items-center justify-center mb-3"><Users className="w-6 h-6 text-muted-foreground" /></div>
                 <p className="text-sm font-medium text-foreground">No contacts found</p>
-                <p className="text-xs text-muted-foreground mt-1">{search || channelFilter !== "all" || tagFilter !== "all" ? "Try adjusting your filters" : "Add your first contact to get started"}</p>
+                <p className="text-xs text-muted-foreground mt-1">{search || channelFilter !== "all" || tagFilter !== "all" || subFilter !== "all" ? "Try adjusting your filters" : "Add your first contact to get started"}</p>
               </div>
             ) : (
               <table className="w-full text-sm">

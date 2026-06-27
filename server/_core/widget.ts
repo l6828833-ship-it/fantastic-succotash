@@ -39,8 +39,16 @@ const WIDGET_JS = `(function(){
 
   var storeKey = "chatbotpro_conv_" + agentId;
   var leadStoreKey = "chatbotpro_lead_" + agentId;
+  var seenKey = "chatbotpro_seen_" + agentId;
   var conversationId = null;
   try { conversationId = localStorage.getItem(storeKey); } catch (e) {}
+
+  // Polling state so human-agent replies (sent from the Inbox after a handoff)
+  // appear in the widget. lastMsgId tracks the highest message id we've shown.
+  var lastMsgId = 0;
+  try { lastMsgId = Number(localStorage.getItem(seenKey)) || 0; } catch (e) {}
+  var pollTimer = null;
+  var humanNoticeShown = false;
 
   var open = false;
   var loading = false;
@@ -216,11 +224,42 @@ const WIDGET_JS = `(function(){
     return d;
   }
 
+  function bumpSeen(id){
+    if (Number(id) > lastMsgId){ lastMsgId = Number(id); try { localStorage.setItem(seenKey, String(lastMsgId)); } catch(e){} }
+  }
+
+  function renderIncoming(list){
+    for (var i = 0; i < list.length; i++){
+      var m = list[i];
+      if (Number(m.id) <= lastMsgId) continue;
+      bumpSeen(m.id);
+      addMsg("bot", m.content || "");
+    }
+  }
+
+  function poll(){
+    if (!conversationId) return;
+    fetch(apiBase + "/widget/messages?agentId=" + encodeURIComponent(agentId) + "&conversationId=" + encodeURIComponent(conversationId) + "&after=" + lastMsgId)
+      .then(function(r){ return r.json(); })
+      .then(function(d){ if (d && d.messages && d.messages.length) renderIncoming(d.messages); })
+      .catch(function(){});
+  }
+
+  function ensurePolling(){
+    if (pollTimer || !conversationId) return;
+    if (leadRequired && !leadDone) return; // wait until the lead form is done
+    poll();
+    pollTimer = setInterval(poll, 4000);
+  }
+
+  function stopPolling(){ if (pollTimer){ clearInterval(pollTimer); pollTimer = null; } }
+
   function openFlow(){
     if (!open || !configLoaded) return;
     if (leadRequired && !leadDone){ showLeadForm(); return; }
     foot.style.display = "flex"; // lead not required (or already captured) — allow chatting
     if (!greeted){ greeted = true; addMsg("bot", welcome); input.focus(); }
+    ensurePolling();
   }
 
   function showLeadForm(){
@@ -276,6 +315,7 @@ const WIDGET_JS = `(function(){
         foot.style.display = "flex";
         if (!greeted){ greeted = true; addMsg("bot", welcome); }
         input.focus();
+        ensurePolling();
       });
     }
 
@@ -295,7 +335,7 @@ const WIDGET_JS = `(function(){
   function toggle(){
     open = !open;
     panel.className = "cbp-panel" + (open ? " cbp-open" : "");
-    if (open) openFlow();
+    if (open){ openFlow(); ensurePolling(); } else { stopPolling(); }
   }
 
   function send(){
@@ -312,7 +352,19 @@ const WIDGET_JS = `(function(){
     }).then(function(r){ return r.json(); }).then(function(data){
       if (typing && typing.parentNode) typing.parentNode.removeChild(typing);
       if (data && data.conversationId){ conversationId = String(data.conversationId); try { localStorage.setItem(storeKey, conversationId); } catch(e){} }
-      addMsg("bot", (data && data.reply) ? data.reply : "Sorry, something went wrong. Please try again.");
+      // Advance the seen marker past the messages the server just created so the
+      // poll loop doesn't render the same AI reply twice.
+      if (data && data.userMessageId) bumpSeen(data.userMessageId);
+      if (data && data.messageId) bumpSeen(data.messageId);
+      if (data && data.mode === "human"){
+        // A human will answer from the Inbox; their reply arrives via polling.
+        if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", "You're connected to our team — someone will reply right here shortly."); }
+      } else if (data && data.reply){
+        addMsg("bot", data.reply);
+      } else {
+        addMsg("bot", "Sorry, something went wrong. Please try again.");
+      }
+      ensurePolling();
     }).catch(function(){
       if (typing && typing.parentNode) typing.parentNode.removeChild(typing);
       addMsg("bot", "Sorry, I couldn't reach the server. Please try again.");
@@ -444,13 +496,20 @@ export function registerWidgetRoutes(app: Express) {
       }
       conversationId = conv?.id ?? null;
 
-      // Upsert a contact (deduped by email within the workspace).
+      // Upsert a contact (deduped by email within the workspace), respecting the
+      // workspace's plan contact limit for brand-new contacts.
       if (email) {
         const existing = await db.findContactByEmail(agent.workspaceId, email);
         if (existing) {
           await db.updateContact(existing.id, { name: name || existing.name, lastSeenAt: new Date() });
         } else {
-          await db.createContact({ workspaceId: agent.workspaceId, name: name || null, email, channel: "web", lastSeenAt: new Date() });
+          const ws = await db.getWorkspaceById(agent.workspaceId);
+          const limit = db.contactLimitForPlan(ws?.plan);
+          const underLimit = !Number.isFinite(limit) || (await db.countContactsByWorkspace(agent.workspaceId)) < limit;
+          if (underLimit) {
+            await db.createContact({ workspaceId: agent.workspaceId, name: name || null, email, channel: "web", lastSeenAt: new Date() });
+          }
+          // At the limit: skip storing the contact, but the chat still works.
         }
       }
 
@@ -465,6 +524,42 @@ export function registerWidgetRoutes(app: Express) {
   app.options("/api/widget/chat", (_req: Request, res: Response) => {
     setCors(res);
     res.sendStatus(204);
+  });
+
+  app.options("/api/widget/messages", (_req: Request, res: Response) => {
+    setCors(res);
+    res.sendStatus(204);
+  });
+
+  // Public endpoint the widget polls to receive agent/system messages that
+  // arrive after the visitor's own send — primarily a human agent's replies
+  // from the Inbox once a conversation has been handed off. Internal notes and
+  // the visitor's own messages are never returned.
+  app.get("/api/widget/messages", async (req: Request, res: Response) => {
+    setCors(res);
+    try {
+      const agentId = Number(req.query.agentId);
+      const conversationId = Number(req.query.conversationId);
+      const after = Number(req.query.after) || 0;
+      if (!agentId || !conversationId) {
+        res.status(400).json({ messages: [] });
+        return;
+      }
+      const agent = await db.getAgentById(agentId);
+      const conv = await db.getConversationById(conversationId);
+      if (!agent || !conv || conv.workspaceId !== agent.workspaceId) {
+        res.json({ messages: [] });
+        return;
+      }
+      const all = await db.getMessagesByConversation(conversationId);
+      const messages = all
+        .filter((m) => Number(m.id) > after && (m.role === "agent" || m.role === "system") && m.isInternal !== true)
+        .map((m) => ({ id: m.id, role: m.role, content: m.content, createdAt: m.createdAt }));
+      res.json({ messages });
+    } catch (error) {
+      console.error("[Widget] messages poll failed", error);
+      res.json({ messages: [] });
+    }
   });
 
   // Public chat endpoint the widget posts to.
@@ -506,12 +601,33 @@ export function registerWidgetRoutes(app: Express) {
         return;
       }
 
-      await db.createMessage({ conversationId, role: "user", content: message });
+      const userMsg = await db.createMessage({ conversationId, role: "user", content: message });
+      const userMessageId = userMsg?.id ?? null;
 
-      // Build the prompt from the agent config + knowledge base.
+      // When the conversation has been handed to a human (escalated, switched to
+      // "human" handoff in the Inbox, or the agent is human-only), the AI must
+      // NOT reply. A teammate answers from the Inbox and the widget receives it
+      // by polling GET /api/widget/messages. Here we only record the visitor msg.
+      const humanMode =
+        conv?.handoffMode === "human" ||
+        conv?.isEscalated === true ||
+        agent.handoffMode === "human_only";
+      if (humanMode) {
+        res.json({ conversationId, mode: "human", userMessageId });
+        return;
+      }
+
+      // Build the prompt from the agent config + THIS agent's knowledge base
+      // (its own Q&A pairs + articles, plus any shared/workspace-wide entries).
       const history = await db.getMessagesByConversation(conversationId);
-      const qaPairs = await db.getQAPairsByWorkspace(agent.workspaceId);
-      const knowledge = qaPairs.slice(0, 12).map((q) => `Q: ${q.question}\nA: ${q.answer}`).join("\n\n");
+      const qaPairs = await db.getQAPairsByAgent(agent.workspaceId, agent.id);
+      const articles = await db.getArticlesByAgent(agent.workspaceId, agent.id);
+      const qaKnowledge = qaPairs.slice(0, 12).map((q) => `Q: ${q.question}\nA: ${q.answer}`).join("\n\n");
+      const articleKnowledge = articles
+        .slice(0, 6)
+        .map((a) => `# ${a.title}\n${String(a.content ?? "").slice(0, 1500)}`)
+        .join("\n\n");
+      const knowledge = [qaKnowledge, articleKnowledge].filter(Boolean).join("\n\n");
       const systemPrompt = [
         agent.systemPrompt || `You are ${agent.name}, a helpful customer support assistant.`,
         `Tone: ${agent.tone ?? "professional"}.`,
@@ -533,9 +649,9 @@ export function registerWidgetRoutes(app: Express) {
         ? String(response.choices[0].message.content)
         : (agent.fallbackMessage ?? "I'm sorry, I couldn't process that right now.");
 
-      await db.createMessage({ conversationId, role: "agent", content: reply });
+      const agentMsg = await db.createMessage({ conversationId, role: "agent", content: reply });
 
-      res.json({ reply, conversationId });
+      res.json({ reply, conversationId, mode: "ai", userMessageId, messageId: agentMsg?.id ?? null });
     } catch (error) {
       console.error("[Widget] chat failed", error);
       // Degrade gracefully so the visitor still sees a reply.

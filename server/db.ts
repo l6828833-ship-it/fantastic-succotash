@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import {
@@ -168,6 +168,18 @@ export async function getArticleById(id: number) {
   return result[0];
 }
 
+// Articles available to a specific agent: those assigned to it, plus shared
+// articles (agentId IS NULL) that apply to every agent in the workspace.
+export async function getArticlesByAgent(workspaceId: number, agentId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(knowledgeArticles)
+    .where(and(eq(knowledgeArticles.workspaceId, workspaceId), or(eq(knowledgeArticles.agentId, agentId), isNull(knowledgeArticles.agentId))))
+    .orderBy(desc(knowledgeArticles.createdAt));
+}
+
 export async function createArticle(data: typeof knowledgeArticles.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
@@ -193,6 +205,18 @@ export async function getQAPairsByWorkspace(workspaceId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(qaPairs).where(eq(qaPairs.workspaceId, workspaceId)).orderBy(desc(qaPairs.createdAt));
+}
+
+// Q&A pairs available to a specific agent: those assigned to it, plus shared
+// pairs (agentId IS NULL) that apply to every agent in the workspace.
+export async function getQAPairsByAgent(workspaceId: number, agentId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select()
+    .from(qaPairs)
+    .where(and(eq(qaPairs.workspaceId, workspaceId), or(eq(qaPairs.agentId, agentId), isNull(qaPairs.agentId))))
+    .orderBy(desc(qaPairs.createdAt));
 }
 
 export async function createQAPair(data: typeof qaPairs.$inferInsert) {
@@ -557,6 +581,27 @@ export async function getContactsByWorkspace(workspaceId: number) {
   return db.select().from(contacts).where(eq(contacts.workspaceId, workspaceId)).orderBy(desc(contacts.updatedAt));
 }
 
+// Per-plan contact storage limits. The free "starter" plan stores up to 100
+// contacts; higher plans store more. Use Infinity for "unlimited".
+export const CONTACT_LIMITS: Record<string, number> = {
+  starter: 100,
+  free: 100,
+  growth: 5000,
+  enterprise: Number.POSITIVE_INFINITY,
+};
+
+export function contactLimitForPlan(plan?: string | null): number {
+  if (!plan) return CONTACT_LIMITS.starter;
+  return CONTACT_LIMITS[plan] ?? CONTACT_LIMITS.starter;
+}
+
+export async function countContactsByWorkspace(workspaceId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db.select({ count: sql<number>`count(*)` }).from(contacts).where(eq(contacts.workspaceId, workspaceId));
+  return Number(result[0]?.count ?? 0);
+}
+
 export async function getContactById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
@@ -573,6 +618,18 @@ export async function findContactByEmail(workspaceId: number, email: string) {
     .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.email, email)))
     .limit(1);
   return result[0];
+}
+
+// Subscribed contacts that have an email address — the audience for an email
+// campaign broadcast.
+export async function getSubscribedContactsByWorkspace(workspaceId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select()
+    .from(contacts)
+    .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.subscribed, true)));
+  return rows.filter((c) => !!c.email && c.email.trim().length > 0);
 }
 
 export async function createContact(data: typeof contacts.$inferInsert) {

@@ -6,6 +6,14 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import { invokeLLM, type Message as LLMMessage } from "./_core/llm";
+import { ENV } from "./_core/env";
+import {
+  isEmailConfigured,
+  sendBulkEmails,
+  personalize,
+  renderCampaignHtml,
+  unsubscribeUrl,
+} from "./_core/email";
 import { storagePut } from "./storage";
 import * as db from "./db";
 
@@ -111,6 +119,26 @@ const agentRouter = router({
 });
 
 // ─── Knowledge Router ─────────────────────────────────────────────────────────
+// Strip an HTML document down to readable plain text for knowledge ingestion.
+function htmlToText(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<(br|\/p|\/div|\/h[1-6]|\/li|\/tr)\s*\/?>/gi, "\n")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/[ \t]+/g, " ")
+    .split("\n").map((l) => l.trim()).filter(Boolean).join("\n")
+    .trim();
+}
+
 const knowledgeRouter = router({
   listArticles: protectedProcedure.query(async ({ ctx }) => {
     const workspace = await db.getWorkspaceByUserId(ctx.user.id);
@@ -139,12 +167,52 @@ const knowledgeRouter = router({
       content: z.string().optional(),
       category: z.string().optional(),
       tags: z.array(z.string()).optional(),
+      agentId: z.number().optional().nullable(),
       imageUrl: z.string().optional().nullable(),
       status: z.enum(["indexing", "ready", "failed"]).optional(),
     }))
     .mutation(async ({ input }) => {
       const { id, ...data } = input;
       return db.updateArticle(id, data);
+    }),
+  importFromUrl: protectedProcedure
+    .input(z.object({
+      url: z.string().url(),
+      agentId: z.number().optional(),
+      category: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) throw new TRPCError({ code: "BAD_REQUEST" });
+      let html = "";
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15000);
+        const resp = await fetch(input.url, {
+          signal: controller.signal,
+          headers: { "User-Agent": "ChatBotPro-KnowledgeBot/1.0" },
+        });
+        clearTimeout(timer);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        html = await resp.text();
+      } catch {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "Could not fetch that URL. Make sure it is public and reachable." });
+      }
+      const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+      const pageTitle = (titleMatch?.[1] || new URL(input.url).hostname).trim().slice(0, 200);
+      const text = htmlToText(html).slice(0, 12000);
+      if (text.length < 20) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "No readable text was found on that page." });
+      }
+      return db.createArticle({
+        workspaceId: workspace.id,
+        agentId: input.agentId,
+        title: pageTitle,
+        content: text,
+        category: input.category ?? "website",
+        sourceUrl: input.url,
+        status: "ready",
+      });
     }),
   deleteArticle: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
     await db.deleteArticle(input.id);
@@ -173,6 +241,7 @@ const knowledgeRouter = router({
       question: z.string().optional(),
       answer: z.string().optional(),
       category: z.string().optional(),
+      agentId: z.number().optional().nullable(),
     }))
     .mutation(async ({ input }) => {
       const { id, ...data } = input;
@@ -460,8 +529,10 @@ const contactsRouter = router({
   }),
   stats: protectedProcedure.query(async ({ ctx }) => {
     const workspace = await db.getWorkspaceByUserId(ctx.user.id);
-    if (!workspace) return { total: 0, subscribed: 0, active30d: 0, openTickets: 0 };
-    return db.getContactStats(workspace.id);
+    if (!workspace) return { total: 0, subscribed: 0, active30d: 0, openTickets: 0, plan: "starter", limit: 100 };
+    const stats = await db.getContactStats(workspace.id);
+    const limit = db.contactLimitForPlan(workspace.plan);
+    return { ...stats, plan: workspace.plan ?? "starter", limit: Number.isFinite(limit) ? limit : null };
   }),
   get: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
     return db.getContactById(input.id);
@@ -480,6 +551,16 @@ const contactsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const workspace = await db.getWorkspaceByUserId(ctx.user.id);
       if (!workspace) throw new TRPCError({ code: "BAD_REQUEST", message: "No workspace found" });
+      const limit = db.contactLimitForPlan(workspace.plan);
+      if (Number.isFinite(limit)) {
+        const count = await db.countContactsByWorkspace(workspace.id);
+        if (count >= limit) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: `You've reached your plan's limit of ${limit} contacts. Upgrade your plan or remove some contacts to add more.`,
+          });
+        }
+      }
       return db.createContact({ ...input, workspaceId: workspace.id, lastSeenAt: new Date() });
     }),
   update: protectedProcedure
@@ -553,6 +634,7 @@ const campaignsRouter = router({
     .input(z.object({
       name: z.string().min(1),
       type: z.enum(["broadcast", "drip"]).optional(),
+      subject: z.string().optional(),
       message: z.string().min(1),
       agentId: z.number().optional(),
       targetUrlPattern: z.string().optional(),
@@ -569,6 +651,7 @@ const campaignsRouter = router({
     .input(z.object({
       id: z.number(),
       name: z.string().optional(),
+      subject: z.string().optional(),
       message: z.string().optional(),
       status: z.enum(["draft", "scheduled", "running", "completed", "paused"]).optional(),
       scheduledAt: z.date().optional().nullable(),
@@ -596,6 +679,78 @@ const campaignsRouter = router({
       }
       return campaign;
     }),
+  send: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ ctx, input }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) throw new TRPCError({ code: "BAD_REQUEST" });
+    const campaign = await db.getCampaignById(input.id);
+    if (!campaign || campaign.workspaceId !== workspace.id) throw new TRPCError({ code: "NOT_FOUND" });
+    if (!isEmailConfigured()) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "Email sending is not configured. Set SMTP_HOST, EMAIL_FROM and SMTP credentials in your environment, then redeploy.",
+      });
+    }
+    if (campaign.status === "running") {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "This campaign is already sending." });
+    }
+
+    const recipients = await db.getSubscribedContactsByWorkspace(workspace.id);
+    if (recipients.length === 0) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "No subscribed contacts with an email address to send to." });
+    }
+
+    // Resolve an absolute base URL for unsubscribe links.
+    const proto = String(ctx.req.headers["x-forwarded-proto"] ?? "https").split(",")[0];
+    const host = ctx.req.headers["x-forwarded-host"] ?? ctx.req.headers.host;
+    const baseUrl = ENV.appBaseUrl || (host ? `${proto}://${host}` : "");
+
+    const subject = (campaign.subject && campaign.subject.trim()) || campaign.name;
+    const bodyTemplate = campaign.message;
+    const workspaceId = workspace.id;
+    const userId = ctx.user.id;
+
+    await db.updateCampaign(campaign.id, { status: "running", sentCount: 0 });
+
+    // Send in the background so the request returns immediately; progress is
+    // persisted to sentCount as batches complete.
+    void (async () => {
+      try {
+        const result = await sendBulkEmails(
+          recipients,
+          (contact) => {
+            const unsub = unsubscribeUrl(baseUrl, workspaceId, contact.id);
+            const body = personalize(bodyTemplate, { name: contact.name, email: contact.email });
+            return {
+              to: contact.email as string,
+              subject: personalize(subject, { name: contact.name, email: contact.email }),
+              html: renderCampaignHtml(body, unsub),
+              text: `${body}\n\nUnsubscribe: ${unsub}`,
+            };
+          },
+          {
+            concurrency: 5,
+            delayMs: 300,
+            onProgress: async (sent) => { await db.updateCampaign(campaign.id, { sentCount: sent }); },
+          },
+        );
+        await db.updateCampaign(campaign.id, { status: "completed", sentCount: result.sent });
+        await db.createNotification({
+          workspaceId,
+          userId,
+          type: "campaign_complete",
+          title: "Campaign Completed",
+          body: `"${campaign.name}" was sent to ${result.sent} contact(s)${result.failed ? `, ${result.failed} failed` : ""}.`,
+          relatedId: campaign.id,
+          relatedType: "campaign",
+        });
+      } catch (error) {
+        console.error("[Campaign] background send failed", error);
+        await db.updateCampaign(campaign.id, { status: "paused" });
+      }
+    })();
+
+    return { recipients: recipients.length };
+  }),
   delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
     await db.deleteCampaign(input.id);
     return { success: true };
