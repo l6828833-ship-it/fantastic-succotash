@@ -167,6 +167,7 @@ CREATE TABLE IF NOT EXISTS "campaigns" (
   "agentId" integer,
   "name" varchar(255) NOT NULL,
   "type" text DEFAULT 'broadcast',
+  "subject" varchar(512),
   "message" text NOT NULL,
   "targetSegment" jsonb,
   "targetUrlPattern" varchar(512),
@@ -244,3 +245,4 @@ CREATE TABLE IF NOT EXISTS "team_members" (
 
 -- Migrations for existing databases (safe to run repeatedly).
 ALTER TABLE "tickets" ADD COLUMN IF NOT EXISTS "contactId" integer;
+ALTER TABLE "campaigns" ADD COLUMN IF NOT EXISTS "subject" varchar(512);

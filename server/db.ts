@@ -573,6 +573,18 @@ export async function findContactByEmail(workspaceId: number, email: string) {
   return result[0];
 }
 
+// Subscribed contacts that have an email address — the audience for an email
+// campaign broadcast.
+export async function getSubscribedContactsByWorkspace(workspaceId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select()
+    .from(contacts)
+    .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.subscribed, true)));
+  return rows.filter((c) => !!c.email && c.email.trim().length > 0);
+}
+
 export async function createContact(data: typeof contacts.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");

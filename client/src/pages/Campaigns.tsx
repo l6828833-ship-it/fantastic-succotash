@@ -26,6 +26,7 @@ export default function Campaigns() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [type, setType] = useState<"broadcast" | "drip">("broadcast");
   const [channel, setChannel] = useState("web");
@@ -35,12 +36,12 @@ export default function Campaigns() {
   const { data: campaigns, refetch } = trpc.campaigns.list.useQuery();
   const { data: contactStats } = trpc.contacts.stats.useQuery();
   const createCampaign = trpc.campaigns.create.useMutation({
-    onSuccess: () => { refetch(); setOpen(false); setName(""); setMessage(""); toast.success("Campaign created!"); },
+    onSuccess: () => { refetch(); setOpen(false); setName(""); setSubject(""); setMessage(""); toast.success("Campaign created!"); },
     onError: () => toast.error("Failed to create campaign"),
   });
-  const sendCampaign = trpc.campaigns.update.useMutation({
-    onSuccess: () => { refetch(); toast.success("Campaign sent!"); },
-    onError: () => toast.error("Failed to send campaign"),
+  const sendCampaign = trpc.campaigns.send.useMutation({
+    onSuccess: (res) => { refetch(); toast.success(`Sending to ${res.recipients} subscribed contact${res.recipients === 1 ? "" : "s"}…`); },
+    onError: (err) => toast.error(err.message || "Failed to send campaign"),
   });
 
   const selectedCampaignData = campaigns?.find((c) => c.id === selectedCampaign);
@@ -48,7 +49,7 @@ export default function Campaigns() {
   const handleCreate = () => {
     if (!name.trim() || !message.trim()) { toast.error("Name and message are required"); return; }
     createCampaign.mutate({
-      name, message, type,
+      name, subject: subject.trim() || undefined, message, type,
       scheduledAt: scheduledAt ? new Date(scheduledAt) : undefined,
     });
   };
@@ -103,9 +104,14 @@ export default function Campaigns() {
                     </p>
                   </div>
                   <div className="space-y-2">
+                    <Label>Email Subject</Label>
+                    <Input placeholder="e.g. 50% off this weekend only 🎉" value={subject} onChange={(e) => setSubject(e.target.value)} />
+                    <p className="text-[11px] text-muted-foreground">Used as the email subject line. Leave blank to use the campaign name. You can use {"{{name}}"} for personalization.</p>
+                  </div>
+                  <div className="space-y-2">
                     <Label>Message</Label>
                     <Textarea
-                      placeholder="Write your campaign message..."
+                      placeholder="Write your campaign message... Use {{name}} to personalize."
                       value={message}
                       onChange={(e) => setMessage(e.target.value)}
                       rows={4}
@@ -192,7 +198,7 @@ export default function Campaigns() {
             {selectedCampaignData.status === "draft" && (
               <Button
                 className="gap-2"
-                onClick={() => sendCampaign.mutate({ id: selectedCampaignData.id, status: 'running' })}
+                onClick={() => sendCampaign.mutate({ id: selectedCampaignData.id })}
                 disabled={sendCampaign.isPending}
               >
                 <Send className="w-4 h-4" />
@@ -206,6 +212,12 @@ export default function Campaigns() {
               <CardTitle className="text-sm font-semibold">Message</CardTitle>
             </CardHeader>
             <CardContent>
+              {selectedCampaignData.subject && (
+                <p className="text-sm font-medium text-foreground mb-2">
+                  <span className="text-muted-foreground font-normal">Subject: </span>
+                  {selectedCampaignData.subject}
+                </p>
+              )}
               <p className="text-sm text-foreground whitespace-pre-wrap">{selectedCampaignData.message}</p>
             </CardContent>
           </Card>
