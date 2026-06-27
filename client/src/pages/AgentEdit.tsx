@@ -117,6 +117,7 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
   const [widgetTheme, setWidgetTheme] = useState("light");
   const [widgetFont, setWidgetFont] = useState("Inter");
   const [launcherIcon, setLauncherIcon] = useState("chat");
+  const [ticketMode, setTicketMode] = useState("off");
   const [isActive, setIsActive] = useState(true);
 
   useEffect(() => {
@@ -145,6 +146,7 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
       setWidgetTheme(agent.widgetTheme ?? "light");
       setWidgetFont(agent.widgetFont ?? "Inter");
       setLauncherIcon(LAUNCHER_ICONS.some((i) => i.id === agent.launcherIconUrl) ? (agent.launcherIconUrl as string) : "chat");
+      setTicketMode(agent.ticketMode ?? "off");
       setIsActive(agent.isActive ?? true);
     }
   }, [agent]);
@@ -165,6 +167,7 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
       widgetTheme: widgetTheme as "light" | "dark",
       widgetFont, isActive,
       launcherIconUrl: launcherIcon,
+      ticketMode: ticketMode as "off" | "always" | "ai_fallback",
     });
   };
 
@@ -784,6 +787,29 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
                   <p className="text-xs text-muted-foreground">Ask for name and email before the conversation starts</p>
                 </div>
                 <Switch checked={leadCaptureEnabled} onCheckedChange={setLeadCaptureEnabled} />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold">Ticketing</CardTitle>
+              <CardDescription className="text-xs">Let visitors open a support ticket from the chat widget</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-2">
+                <Label className="text-sm">When to offer a ticket</Label>
+                <Select value={ticketMode} onValueChange={setTicketMode}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="off">Off — no ticket option</SelectItem>
+                    <SelectItem value="always">Always — show from the start of chat</SelectItem>
+                    <SelectItem value="ai_fallback">When the AI can't help — offer a ticket automatically</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Tickets appear in your Tickets inbox. Escalating a conversation to a human also creates a ticket automatically.
+                </p>
               </div>
             </CardContent>
           </Card>

@@ -319,6 +319,13 @@ export async function getTicketsByContact(contactId: number) {
   return db.select().from(tickets).where(eq(tickets.contactId, contactId)).orderBy(desc(tickets.createdAt));
 }
 
+export async function getTicketByConversation(conversationId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(tickets).where(eq(tickets.conversationId, conversationId)).limit(1);
+  return result[0];
+}
+
 export async function createTicket(data: typeof tickets.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
