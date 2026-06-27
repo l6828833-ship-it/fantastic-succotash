@@ -4,7 +4,7 @@ import { useState } from "react";
 import {
   Plus, Search, Filter, X, Send, Trash2, Tag, Clock,
   User, AlertCircle, CheckCircle2, Circle, Loader2, StickyNote,
-  ArrowUpRight, MessageSquare, MoreHorizontal, Edit2, Check,
+  ArrowUpRight, MessageSquare, MoreHorizontal, Edit2, Check, Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +66,7 @@ export default function Tickets() {
 
   // Detail panel
   const [noteContent, setNoteContent] = useState("");
+  const [replyContent, setReplyContent] = useState("");
   const [editingTitle, setEditingTitle] = useState(false);
   const [editTitle, setEditTitle] = useState("");
 
@@ -120,6 +121,43 @@ export default function Tickets() {
     onError: () => toast.error("Failed to delete note"),
   });
 
+  // ── Customer conversation (reply thread) ──
+  const conversationId = selectedTicket?.conversationId ?? null;
+  const { data: convMessages, refetch: refetchConvMessages } = trpc.inbox.getMessages.useQuery(
+    { conversationId: conversationId! },
+    { enabled: !!conversationId }
+  );
+  const sendReply = trpc.inbox.sendMessage.useMutation({
+    onSuccess: () => { refetchConvMessages(); setReplyContent(""); },
+    onError: () => toast.error("Failed to send reply"),
+  });
+  const startConversation = trpc.inbox.createConversation.useMutation({
+    onSuccess: (conv) => {
+      if (conv && selectedTicket) {
+        updateTicket.mutate({ id: selectedTicket.id, conversationId: conv.id });
+        setSelectedTicket({ ...selectedTicket, conversationId: conv.id });
+        // Seed the thread with the original request so the customer has context.
+        if (selectedTicket.description) {
+          sendReply.mutate({ conversationId: conv.id, content: selectedTicket.description, role: "user" });
+        } else {
+          refetchConvMessages();
+        }
+        toast.success("Conversation started");
+      }
+    },
+    onError: () => toast.error("Failed to start conversation"),
+  });
+
+  const handleSendReply = () => {
+    if (!conversationId || !replyContent.trim()) return;
+    sendReply.mutate({ conversationId, content: replyContent, role: "agent" });
+  };
+
+  const handleStartConversation = () => {
+    if (!selectedTicket) return;
+    startConversation.mutate({ visitorName: "Customer", channel: "web" });
+  };
+
   const filtered = (tickets as TicketRow[]).filter((t) => {
     const matchSearch = !search || t.title.toLowerCase().includes(search.toLowerCase()) || (t.description ?? "").toLowerCase().includes(search.toLowerCase());
     const matchPriority = priorityFilter === "all" || t.priority === priorityFilter;
@@ -149,6 +187,16 @@ export default function Tickets() {
     if (!selectedTicket) return;
     updateTicket.mutate({ id: selectedTicket.id, status });
     setSelectedTicket({ ...selectedTicket, status });
+    // Keep the customer informed by posting a status update into their thread.
+    if (selectedTicket.conversationId) {
+      const msg =
+        status === "closed"
+          ? "Your ticket has been resolved and closed. Thank you for reaching out!"
+          : status === "in-progress"
+            ? "An agent is now working on your ticket. We'll keep you posted."
+            : "Your ticket has been reopened and is awaiting review.";
+      sendReply.mutate({ conversationId: selectedTicket.conversationId, content: msg, role: "system" });
+    }
   };
 
   const handlePriorityChange = (priority: TicketPriority) => {
@@ -431,19 +479,70 @@ export default function Tickets() {
               </div>
             )}
 
-            {/* Linked conversation */}
-            {selectedTicket.conversationId && (
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">Linked Conversation</Label>
-                <div className="flex items-center gap-2 p-2.5 rounded-lg border border-border bg-muted/20">
-                  <MessageSquare className="w-4 h-4 text-primary" />
-                  <span className="text-sm text-foreground">Conversation #{selectedTicket.conversationId}</span>
-                  <Button size="sm" variant="ghost" className="ml-auto h-6 px-2 text-xs gap-1" onClick={() => toast.info("Open conversation in inbox")}>
-                    View <ArrowUpRight className="w-3 h-3" />
+            {/* Customer conversation */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="w-4 h-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold text-foreground">Customer Conversation</h3>
+                {selectedTicket.conversationId && (
+                  <Badge variant="secondary" className="text-xs">#{selectedTicket.conversationId}</Badge>
+                )}
+              </div>
+              {selectedTicket.conversationId ? (
+                <div className="rounded-lg border border-border overflow-hidden">
+                  <div className="max-h-72 overflow-y-auto p-3 space-y-3 bg-muted/10">
+                    {!convMessages || convMessages.filter((m) => m.role !== "note").length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-4">No messages yet. Send the first reply to the customer below.</p>
+                    ) : (
+                      convMessages.filter((m) => m.role !== "note").map((m) => (
+                        <div key={m.id} className={cn("flex gap-2", m.role === "user" ? "justify-start" : "justify-end")}>
+                          {m.role === "user" && (
+                            <div className="w-6 h-6 rounded-full bg-secondary flex items-center justify-center shrink-0 mt-0.5">
+                              <User className="w-3 h-3 text-secondary-foreground" />
+                            </div>
+                          )}
+                          {m.role === "system" ? (
+                            <div className="mx-auto bg-muted text-muted-foreground rounded-full px-3 py-1 text-xs italic">{m.content}</div>
+                          ) : (
+                            <div className={cn(
+                              "max-w-[80%] rounded-2xl px-3 py-2 text-sm",
+                              m.role === "user" ? "bg-background border border-border text-foreground rounded-tl-sm" : "bg-primary text-primary-foreground rounded-tr-sm"
+                            )}>
+                              {m.content}
+                            </div>
+                          )}
+                          {m.role === "agent" && (
+                            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                              <Bot className="w-3 h-3 text-primary" />
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div className="flex gap-2 p-2 border-t border-border bg-background">
+                    <Textarea
+                      value={replyContent}
+                      onChange={(e) => setReplyContent(e.target.value)}
+                      placeholder="Reply to the customer..."
+                      rows={2}
+                      className="flex-1 resize-none text-sm"
+                      onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendReply(); } }}
+                    />
+                    <Button size="icon" className="h-9 w-9 self-end" onClick={handleSendReply} disabled={!replyContent.trim() || sendReply.isPending}>
+                      <Send className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed border-border p-4 text-center">
+                  <p className="text-xs text-muted-foreground mb-2">No customer conversation is linked to this ticket yet.</p>
+                  <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs" onClick={handleStartConversation} disabled={startConversation.isPending}>
+                    <MessageSquare className="w-3.5 h-3.5" /> Start conversation with customer
                   </Button>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
 
             <Separator />
 

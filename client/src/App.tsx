@@ -11,6 +11,7 @@ import AgentEdit from "./pages/AgentEdit";
 import Playground from "./pages/Playground";
 import Inbox from "./pages/Inbox";
 import Tickets from "./pages/Tickets";
+import Contacts from "./pages/Contacts";
 import Campaigns from "./pages/Campaigns";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import Analytics from "./pages/Analytics";
@@ -122,6 +123,15 @@ function Router() {
           <OnboardingGate>
             <AppLayout>
               <Tickets />
+            </AppLayout>
+          </OnboardingGate>
+        </AuthGate>
+      )} />
+      <Route path="/contacts" component={() => (
+        <AuthGate>
+          <OnboardingGate>
+            <AppLayout>
+              <Contacts />
             </AppLayout>
           </OnboardingGate>
         </AuthGate>

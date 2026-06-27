@@ -6,12 +6,14 @@ import {
   agents,
   cannedResponses,
   campaigns,
+  contacts,
   conversations,
   knowledgeArticles,
   messages,
   notifications,
   playgroundSessions,
   qaPairs,
+  teamMembers,
   ticketNotes,
   tickets,
   users,
@@ -530,4 +532,86 @@ export async function updatePlaygroundSession(id: number, data: Partial<typeof p
   if (!db) throw new Error("DB not available");
   const [row] = await db.update(playgroundSessions).set(data).where(eq(playgroundSessions.id, id)).returning();
   return row;
+}
+
+
+// ─── Contacts ─────────────────────────────────────────────────────────────────
+export async function getContactsByWorkspace(workspaceId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(contacts).where(eq(contacts.workspaceId, workspaceId)).orderBy(desc(contacts.updatedAt));
+}
+
+export async function getContactById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(contacts).where(eq(contacts.id, id)).limit(1);
+  return result[0];
+}
+
+export async function createContact(data: typeof contacts.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.insert(contacts).values(data).returning();
+  return row;
+}
+
+export async function updateContact(id: number, data: Partial<typeof contacts.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.update(contacts).set(data).where(eq(contacts.id, id)).returning();
+  return row;
+}
+
+export async function deleteContact(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(contacts).where(eq(contacts.id, id));
+}
+
+export async function getContactStats(workspaceId: number) {
+  const db = await getDb();
+  if (!db) return { total: 0, subscribed: 0, active30d: 0, openTickets: 0 };
+
+  const total = await db.select({ count: sql<number>`count(*)` }).from(contacts).where(eq(contacts.workspaceId, workspaceId));
+  const subscribed = await db.select({ count: sql<number>`count(*)` }).from(contacts).where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.subscribed, true)));
+  const active = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(contacts)
+    .where(and(eq(contacts.workspaceId, workspaceId), sql`${contacts.lastSeenAt} >= NOW() - INTERVAL '30 days'`));
+  const openTickets = await db.select({ count: sql<number>`count(*)` }).from(tickets).where(and(eq(tickets.workspaceId, workspaceId), eq(tickets.status, "open")));
+
+  return {
+    total: Number(total[0]?.count ?? 0),
+    subscribed: Number(subscribed[0]?.count ?? 0),
+    active30d: Number(active[0]?.count ?? 0),
+    openTickets: Number(openTickets[0]?.count ?? 0),
+  };
+}
+
+// ─── Team Members ─────────────────────────────────────────────────────────────
+export async function getTeamMembersByWorkspace(workspaceId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(teamMembers).where(eq(teamMembers.workspaceId, workspaceId)).orderBy(desc(teamMembers.createdAt));
+}
+
+export async function createTeamMember(data: typeof teamMembers.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.insert(teamMembers).values(data).returning();
+  return row;
+}
+
+export async function updateTeamMember(id: number, data: Partial<typeof teamMembers.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.update(teamMembers).set(data).where(eq(teamMembers.id, id)).returning();
+  return row;
+}
+
+export async function deleteTeamMember(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(teamMembers).where(eq(teamMembers.id, id));
 }
