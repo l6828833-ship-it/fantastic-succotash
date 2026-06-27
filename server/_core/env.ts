@@ -1,10 +1,22 @@
 export const ENV = {
-  appId: process.env.VITE_APP_ID ?? "",
+  // Internal label embedded in signed session JWTs. Does not need to match any
+  // external service; defaults to a non-empty constant so sessions verify even
+  // when VITE_APP_ID is not set.
+  appId: process.env.VITE_APP_ID || "github-oauth-app",
   cookieSecret: process.env.JWT_SECRET ?? "",
   databaseUrl: process.env.DATABASE_URL ?? "",
-  oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+
+  // GitHub OAuth (self-hosted login). Create an OAuth App at
+  // https://github.com/settings/developers and set these in your environment.
+  githubClientId: process.env.GITHUB_CLIENT_ID ?? "",
+  githubClientSecret: process.env.GITHUB_CLIENT_SECRET ?? "",
+  // Optional: grant the "admin" role to a specific GitHub account.
+  ownerGithubLogin: process.env.OWNER_GITHUB_LOGIN ?? "",
+  // Optional: force the public base URL (e.g. https://app.up.railway.app).
+  // When unset it is derived from the incoming request headers.
+  appBaseUrl: process.env.APP_BASE_URL ?? "",
 };
