@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import {
   InsertUser,
+  affiliates,
   agents,
   cannedResponses,
   campaigns,
@@ -13,6 +14,7 @@ import {
   notifications,
   playgroundSessions,
   qaPairs,
+  referrals,
   teamMembers,
   ticketNotes,
   tickets,
@@ -638,4 +640,56 @@ export async function deleteTeamMember(id: number) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   await db.delete(teamMembers).where(eq(teamMembers.id, id));
+}
+
+
+// ─── Affiliates / Referrals ─────────────────────────────────────────────────--
+// Tiered commission rates based on the affiliate's number of referrals.
+export const AFFILIATE_TIERS: Array<{ label: string; min: number; rate: number }> = [
+  { label: "1–10 referrals", min: 1, rate: 10 },
+  { label: "10–20 referrals", min: 10, rate: 20 },
+  { label: "20–100 referrals", min: 20, rate: 25 },
+  { label: "100–1000 referrals", min: 100, rate: 30 },
+];
+
+export function commissionRateForReferrals(count: number): number {
+  let rate = 0;
+  for (const tier of AFFILIATE_TIERS) {
+    if (count >= tier.min) rate = tier.rate;
+  }
+  return rate;
+}
+
+export async function getAffiliateByUserId(userId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(affiliates).where(eq(affiliates.userId, userId)).limit(1);
+  return result[0];
+}
+
+export async function getAffiliateByCode(code: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(affiliates).where(eq(affiliates.code, code)).limit(1);
+  return result[0];
+}
+
+export async function createAffiliate(data: typeof affiliates.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.insert(affiliates).values(data).returning();
+  return row;
+}
+
+export async function getReferralsByAffiliate(affiliateId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(referrals).where(eq(referrals.affiliateId, affiliateId)).orderBy(desc(referrals.createdAt));
+}
+
+export async function createReferral(data: typeof referrals.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.insert(referrals).values(data).returning();
+  return row;
 }

@@ -1,5 +1,6 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
+import { customAlphabet } from "nanoid";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -735,6 +736,52 @@ const uploadRouter = router({
     }),
 });
 
+// ─── Affiliate Router ─────────────────────────────────────────────────────────
+const genAffiliateCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
+
+const affiliateRouter = router({
+  get: protectedProcedure.query(async ({ ctx }) => {
+    let affiliate = await db.getAffiliateByUserId(ctx.user.id);
+    if (!affiliate) {
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      try {
+        affiliate = await db.createAffiliate({
+          userId: ctx.user.id,
+          workspaceId: workspace?.id ?? null,
+          code: genAffiliateCode(),
+        });
+      } catch {
+        // A concurrent request may have created it first.
+        affiliate = await db.getAffiliateByUserId(ctx.user.id);
+      }
+    }
+    if (!affiliate) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not create affiliate account" });
+
+    const refs = await db.getReferralsByAffiliate(affiliate.id);
+    const referralCount = refs.length;
+    const activeReferrals = refs.filter((r) => r.status === "active").length;
+    const rate = db.commissionRateForReferrals(referralCount);
+    const revenueCents = refs.filter((r) => r.status !== "cancelled").reduce((sum, r) => sum + (r.amount ?? 0), 0);
+    const earningsCents = Math.round((revenueCents * rate) / 100);
+    const nextTier = db.AFFILIATE_TIERS.find((t) => referralCount < t.min) ?? null;
+
+    return {
+      code: affiliate.code,
+      referralCount,
+      activeReferrals,
+      rate,
+      earningsCents,
+      tiers: db.AFFILIATE_TIERS,
+      nextTier: nextTier ? { rate: nextTier.rate, min: nextTier.min, remaining: nextTier.min - referralCount } : null,
+    };
+  }),
+  listReferrals: protectedProcedure.query(async ({ ctx }) => {
+    const affiliate = await db.getAffiliateByUserId(ctx.user.id);
+    if (!affiliate) return [];
+    return db.getReferralsByAffiliate(affiliate.id);
+  }),
+});
+
 // ─── App Router ───────────────────────────────────────────────────────────────
 export const appRouter = router({
   system: systemRouter,
@@ -759,6 +806,7 @@ export const appRouter = router({
   notifications: notificationsRouter,
   playground: playgroundRouter,
   upload: uploadRouter,
+  affiliate: affiliateRouter,
 });
 
 export type AppRouter = typeof appRouter;

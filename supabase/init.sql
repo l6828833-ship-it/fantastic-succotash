@@ -244,3 +244,23 @@ CREATE TABLE IF NOT EXISTS "team_members" (
 
 -- Migrations for existing databases (safe to run repeatedly).
 ALTER TABLE "tickets" ADD COLUMN IF NOT EXISTS "contactId" integer;
+
+CREATE TABLE IF NOT EXISTS "affiliates" (
+  "id" serial PRIMARY KEY,
+  "userId" integer NOT NULL UNIQUE,
+  "workspaceId" integer,
+  "code" varchar(32) NOT NULL UNIQUE,
+  "createdAt" timestamptz NOT NULL DEFAULT now(),
+  "updatedAt" timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS "referrals" (
+  "id" serial PRIMARY KEY,
+  "affiliateId" integer NOT NULL,
+  "referredName" varchar(255),
+  "referredEmail" varchar(320),
+  "plan" varchar(64) DEFAULT 'starter',
+  "amount" integer DEFAULT 0,
+  "status" text DEFAULT 'pending',
+  "createdAt" timestamptz NOT NULL DEFAULT now()
+);

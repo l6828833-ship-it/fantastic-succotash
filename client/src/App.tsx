@@ -16,6 +16,7 @@ import Campaigns from "./pages/Campaigns";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import Analytics from "./pages/Analytics";
 import EmbedCode from "./pages/EmbedCode";
+import Affiliate from "./pages/Affiliate";
 import Settings from "./pages/Settings";
 import AppLayout from "./components/AppLayout";
 import { useAuth } from "./_core/hooks/useAuth";
@@ -168,6 +169,15 @@ function Router() {
           <OnboardingGate>
             <AppLayout>
               <EmbedCode />
+            </AppLayout>
+          </OnboardingGate>
+        </AuthGate>
+      )} />
+      <Route path="/affiliate" component={() => (
+        <AuthGate>
+          <OnboardingGate>
+            <AppLayout>
+              <Affiliate />
             </AppLayout>
           </OnboardingGate>
         </AuthGate>
