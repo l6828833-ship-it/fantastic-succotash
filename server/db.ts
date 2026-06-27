@@ -92,6 +92,20 @@ export async function getUserByOpenId(openId: string) {
   return result[0];
 }
 
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return result[0];
+}
+
+export async function createUser(data: typeof users.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.insert(users).values(data).returning();
+  return row;
+}
+
 // ─── Workspaces ───────────────────────────────────────────────────────────────
 export async function getWorkspaceByUserId(userId: number) {
   const db = await getDb();

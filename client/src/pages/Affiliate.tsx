@@ -85,13 +85,18 @@ export default function Affiliate() {
           {data?.code && (
             <p className="text-xs text-muted-foreground">Referral code: <span className="font-mono font-semibold text-foreground">{data.code}</span></p>
           )}
+          {data && (
+            <p className="text-xs text-muted-foreground">
+              <span className="font-semibold text-foreground">{data.referralCount}</span> sign-up{data.referralCount === 1 ? "" : "s"} from your link
+            </p>
+          )}
         </CardContent>
       </Card>
 
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatCard label="Total referrals" value={data?.referralCount ?? 0} sub={`${data?.activeReferrals ?? 0} active`} icon={Users} />
+        <StatCard label="Sign-ups from link" value={data?.referralCount ?? 0} sub={`${data?.activeReferrals ?? 0} active`} icon={Users} />
         <StatCard label="Commission rate" value={`${data?.rate ?? 0}%`} sub="based on your tier" icon={Percent} />
         <StatCard label="Earnings" value={money(data?.earningsCents)} sub="estimated" icon={DollarSign} />
         <StatCard

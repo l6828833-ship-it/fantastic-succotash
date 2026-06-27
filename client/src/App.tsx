@@ -18,6 +18,7 @@ import KnowledgeBase from "./pages/KnowledgeBase";
 import Analytics from "./pages/Analytics";
 import EmbedCode from "./pages/EmbedCode";
 import Affiliate from "./pages/Affiliate";
+import Login from "./pages/Login";
 import Settings from "./pages/Settings";
 import AppLayout from "./components/AppLayout";
 import { useAuth } from "./_core/hooks/useAuth";
@@ -70,6 +71,7 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
 function Router() {
   return (
     <Switch>
+      <Route path="/login" component={Login} />
       <Route path="/" component={() => (
         <AuthGate>
           <OnboardingGate>
@@ -205,8 +207,9 @@ function App() {
     try {
       const ref = new URLSearchParams(window.location.search).get("ref");
       if (ref && /^[A-Za-z0-9]{4,32}$/.test(ref)) {
-        // Persist the referral code for 5 days so it survives the OAuth round-trip.
-        document.cookie = `cbp_ref=${encodeURIComponent(ref)}; path=/; max-age=432000; samesite=lax`;
+        // Persist the referral code + click time for 5 days so it survives the
+        // OAuth round-trip; the server re-checks the 5-day window too.
+        document.cookie = `cbp_ref=${encodeURIComponent(ref)}.${Date.now()}; path=/; max-age=432000; samesite=lax`;
       }
     } catch {
       // ignore (e.g. cookies disabled)
