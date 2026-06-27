@@ -22,4 +22,19 @@ export const ENV = {
   // Optional: force the public base URL (e.g. https://app.up.railway.app).
   // When unset it is derived from the incoming request headers.
   appBaseUrl: process.env.APP_BASE_URL ?? "",
+
+  // ─── Email / SMTP (campaign + transactional sending) ───────────────────────
+  // Works with any SMTP provider (Amazon SES, SendGrid, Mailgun, Postmark,
+  // Gmail, etc.). Email features are disabled gracefully when these are unset.
+  smtpHost: process.env.SMTP_HOST ?? "",
+  smtpPort: Number(process.env.SMTP_PORT ?? "587"),
+  // Force a TLS-on-connect (smtps) socket. Defaults to true for port 465.
+  smtpSecure: process.env.SMTP_SECURE
+    ? /^(1|true|yes)$/i.test(process.env.SMTP_SECURE)
+    : Number(process.env.SMTP_PORT ?? "587") === 465,
+  smtpUser: process.env.SMTP_USER ?? "",
+  smtpPass: process.env.SMTP_PASS ?? "",
+  // The From address shown to recipients, and an optional display name.
+  emailFrom: process.env.EMAIL_FROM ?? "",
+  emailFromName: process.env.EMAIL_FROM_NAME ?? "",
 };
