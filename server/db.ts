@@ -5,6 +5,7 @@ import {
   agents,
   analyticsEvents,
   campaigns,
+  cannedResponses,
   conversations,
   knowledgeArticles,
   messages,
@@ -298,6 +299,104 @@ export async function deleteTicketNote(id: number) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   await db.delete(ticketNotes).where(eq(ticketNotes.id, id));
+}
+
+// ─── Canned Responses (Quick Replies) ─────────────────────────────────────────
+const DEFAULT_CANNED_RESPONSES: Array<{ title: string; content: string; category: string; shortcut: string }> = [
+  {
+    title: "Greeting",
+    content: "Hi {{name}}, thanks for reaching out! My name is here to help. How can I assist you today?",
+    category: "Greetings",
+    shortcut: "/hi",
+  },
+  {
+    title: "Acknowledge & investigate",
+    content: "Thanks for the details, {{name}}. I'm looking into this for you right now and will get back to you shortly.",
+    category: "General",
+    shortcut: "/look",
+  },
+  {
+    title: "Ask for more info",
+    content: "To help me resolve this faster, could you please share a bit more detail (such as your account email, order number, or a screenshot of the issue)?",
+    category: "General",
+    shortcut: "/info",
+  },
+  {
+    title: "Apologize for the inconvenience",
+    content: "I'm really sorry for the inconvenience this has caused, {{name}}. Let's get this sorted out for you as quickly as possible.",
+    category: "General",
+    shortcut: "/sorry",
+  },
+  {
+    title: "Issue resolved",
+    content: "Glad I could help, {{name}}! I'll go ahead and mark this as resolved. Feel free to reach out anytime if you need anything else.",
+    category: "Closing",
+    shortcut: "/done",
+  },
+  {
+    title: "Closing & follow-up",
+    content: "Is there anything else I can help you with today? If not, have a wonderful day!",
+    category: "Closing",
+    shortcut: "/bye",
+  },
+];
+
+export async function getCannedResponsesByWorkspace(workspaceId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const existing = await db
+    .select()
+    .from(cannedResponses)
+    .where(eq(cannedResponses.workspaceId, workspaceId))
+    .orderBy(desc(cannedResponses.usageCount), desc(cannedResponses.updatedAt));
+  if (existing.length > 0) return existing;
+
+  // Seed sensible defaults the first time a workspace opens quick replies.
+  await db.insert(cannedResponses).values(
+    DEFAULT_CANNED_RESPONSES.map((r) => ({ ...r, workspaceId }))
+  );
+  return db
+    .select()
+    .from(cannedResponses)
+    .where(eq(cannedResponses.workspaceId, workspaceId))
+    .orderBy(desc(cannedResponses.usageCount), desc(cannedResponses.updatedAt));
+}
+
+export async function getCannedResponseById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(cannedResponses).where(eq(cannedResponses.id, id)).limit(1);
+  return result[0];
+}
+
+export async function createCannedResponse(data: typeof cannedResponses.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(cannedResponses).values(data);
+  const insertId = (result as unknown as [{ insertId: number }])[0]?.insertId;
+  return getCannedResponseById(insertId);
+}
+
+export async function updateCannedResponse(id: number, data: Partial<typeof cannedResponses.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(cannedResponses).set(data).where(eq(cannedResponses.id, id));
+  return getCannedResponseById(id);
+}
+
+export async function incrementCannedResponseUsage(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db
+    .update(cannedResponses)
+    .set({ usageCount: sql`${cannedResponses.usageCount} + 1` })
+    .where(eq(cannedResponses.id, id));
+}
+
+export async function deleteCannedResponse(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(cannedResponses).where(eq(cannedResponses.id, id));
 }
 // ─── Campaigns ────────────────────────────────────────────────────────────────
 export async function getCampaignsByWorkspace(workspaceId: number) {

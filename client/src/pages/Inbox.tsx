@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { QuickReplies } from "@/components/QuickReplies";
 import { toast } from "sonner";
 
 const STATUS_CONFIG = {
@@ -358,6 +359,15 @@ export default function Inbox() {
                 >
                   <Sparkles className={cn("w-4 h-4", suggestReply.isPending ? "animate-pulse text-primary" : "text-muted-foreground")} />
                 </Button>
+                <QuickReplies
+                  visitorName={selectedConv.visitorName}
+                  draft={messageInput}
+                  onSelect={(content) =>
+                    setMessageInput((prev) =>
+                      prev.trim() ? `${prev.replace(/\s+$/, "")} ${content}` : content
+                    )
+                  }
+                />
                 <Button
                   size="icon"
                   className="h-9 w-9"

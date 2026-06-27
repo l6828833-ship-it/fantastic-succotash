@@ -175,6 +175,22 @@ export const ticketNotes = mysqlTable("ticketNotes", {
 });
 export type TicketNote = typeof ticketNotes.$inferSelect;
 export type InsertTicketNote = typeof ticketNotes.$inferInsert;
+
+// ─── Canned Responses (Quick Replies) ─────────────────────────────────────────
+export const cannedResponses = mysqlTable("canned_responses", {
+  id: int("id").autoincrement().primaryKey(),
+  workspaceId: int("workspaceId").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  content: text("content").notNull(),
+  category: varchar("category", { length: 128 }).default("General"),
+  shortcut: varchar("shortcut", { length: 64 }),
+  usageCount: int("usageCount").default(0).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CannedResponse = typeof cannedResponses.$inferSelect;
+export type InsertCannedResponse = typeof cannedResponses.$inferInsert;
 // ─── Campaigns ────────────────────────────────────────────────────────────────
 export const campaigns = mysqlTable("campaigns", {
   id: int("id").autoincrement().primaryKey(),
