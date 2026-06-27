@@ -12,6 +12,7 @@ import {
   knowledgeArticles,
   messages,
   notifications,
+  payoutRequests,
   playgroundSessions,
   qaPairs,
   referrals,
@@ -853,4 +854,61 @@ export async function getPlatformStats() {
     tickets: await one(tickets),
     contacts: await one(contacts),
   };
+}
+
+// ─── Affiliate payouts / withdrawals ──────────────────────────────────────────
+export async function getAffiliateById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(affiliates).where(eq(affiliates.id, id)).limit(1);
+  return result[0];
+}
+
+export async function getAllAffiliates(limit = 500) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(affiliates).orderBy(desc(affiliates.createdAt)).limit(limit);
+}
+
+export async function updateAffiliateAdjustment(id: number, adjustmentCents: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.update(affiliates).set({ adjustmentCents }).where(eq(affiliates.id, id)).returning();
+  return row;
+}
+
+export async function createPayoutRequest(data: typeof payoutRequests.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.insert(payoutRequests).values(data).returning();
+  return row;
+}
+
+export async function getPayoutsByAffiliate(affiliateId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(payoutRequests).where(eq(payoutRequests.affiliateId, affiliateId)).orderBy(desc(payoutRequests.createdAt));
+}
+
+export async function getAllPayouts(limit = 500) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(payoutRequests).orderBy(desc(payoutRequests.createdAt)).limit(limit);
+}
+
+export async function updatePayoutStatus(id: number, status: "pending" | "approved" | "paid" | "rejected", adminNote?: string | null) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.update(payoutRequests)
+    .set({ status, adminNote: adminNote ?? null, processedAt: new Date() })
+    .where(eq(payoutRequests.id, id)).returning();
+  return row;
+}
+
+// Cents reserved against an affiliate's balance: everything not rejected.
+export async function getReservedPayoutCents(affiliateId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const rows = await db.select().from(payoutRequests).where(eq(payoutRequests.affiliateId, affiliateId));
+  return rows.filter((p) => p.status !== "rejected").reduce((s, p) => s + (p.amountCents ?? 0), 0);
 }

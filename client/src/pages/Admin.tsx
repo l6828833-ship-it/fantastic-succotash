@@ -1,9 +1,12 @@
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
-import { Shield, Users, Building2, Bot, MessageSquare, Ticket, Contact, ShieldCheck, ShieldOff } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { useState } from "react";
+import { Shield, Users, Building2, Bot, MessageSquare, Ticket, Contact, ShieldCheck, ShieldOff, Gift, Wallet, Check, X, DollarSign } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
@@ -44,6 +47,18 @@ export default function Admin() {
     onError: () => toast.error("Failed to update plan"),
   });
 
+  const { data: affiliates = [] } = trpc.admin.affiliates.useQuery(undefined, { enabled: isAdmin });
+  const { data: payouts = [] } = trpc.admin.payouts.useQuery(undefined, { enabled: isAdmin });
+  const [adjDrafts, setAdjDrafts] = useState<Record<number, string>>({});
+  const setAdjustment = trpc.admin.setAffiliateAdjustment.useMutation({
+    onSuccess: () => { utils.admin.affiliates.invalidate(); toast.success("Adjustment saved"); },
+    onError: () => toast.error("Failed to save adjustment"),
+  });
+  const setPayoutStatus = trpc.admin.setPayoutStatus.useMutation({
+    onSuccess: () => { utils.admin.payouts.invalidate(); utils.admin.affiliates.invalidate(); toast.success("Payout updated"); },
+    onError: () => toast.error("Failed to update payout"),
+  });
+
   if (!isAdmin) {
     return (
       <div className="p-10 text-center">
@@ -61,6 +76,13 @@ export default function Admin() {
   const wsList = workspaces as W[];
   const ownerEmail = (uid: number) => userList.find((u) => u.id === uid)?.email ?? `user #${uid}`;
   const fmt = (d?: string | Date | null) => (d ? new Date(d).toLocaleDateString() : "—");
+
+  type Aff = { id: number; code: string; ownerEmail?: string | null; ownerName?: string | null; referralCount: number; rate: number; earningsCents: number; adjustmentCents: number; availableCents: number; paidCents: number };
+  type Payout = { id: number; affiliateCode?: string | null; ownerEmail?: string | null; amountCents: number; method: string; details?: Record<string, string> | null; status?: string | null; adminNote?: string | null; createdAt: string | Date };
+  const affList = affiliates as Aff[];
+  const payoutList = payouts as Payout[];
+  const money = (c?: number | null) => `$${((c ?? 0) / 100).toFixed(2)}`;
+  const pendingPayouts = payoutList.filter((p) => p.status === "pending").length;
 
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
@@ -87,6 +109,8 @@ export default function Admin() {
         <TabsList>
           <TabsTrigger value="users" className="gap-1.5 text-xs"><Users className="w-3.5 h-3.5" />Users ({userList.length})</TabsTrigger>
           <TabsTrigger value="workspaces" className="gap-1.5 text-xs"><Building2 className="w-3.5 h-3.5" />Workspaces ({wsList.length})</TabsTrigger>
+          <TabsTrigger value="affiliates" className="gap-1.5 text-xs"><Gift className="w-3.5 h-3.5" />Affiliates ({affList.length})</TabsTrigger>
+          <TabsTrigger value="payouts" className="gap-1.5 text-xs"><Wallet className="w-3.5 h-3.5" />Payouts{pendingPayouts > 0 ? ` (${pendingPayouts})` : ""}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="users" className="mt-4">
@@ -156,6 +180,134 @@ export default function Admin() {
                             {PLAN_OPTIONS.map((p) => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
                           </SelectContent>
                         </Select>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="affiliates" className="mt-4">
+          <Card className="border-border">
+            <CardContent className="p-0 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40">
+                  <tr className="text-left text-xs text-muted-foreground">
+                    <th className="px-4 py-2.5 font-medium">Affiliate</th>
+                    <th className="px-3 py-2.5 font-medium">Referrals</th>
+                    <th className="px-3 py-2.5 font-medium hidden sm:table-cell">Rate</th>
+                    <th className="px-3 py-2.5 font-medium">Earnings</th>
+                    <th className="px-3 py-2.5 font-medium">Available</th>
+                    <th className="px-3 py-2.5 font-medium">Adjustment ($)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {affList.length === 0 ? (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No affiliates yet</td></tr>
+                  ) : affList.map((a) => {
+                    const draft = adjDrafts[a.id] ?? String((a.adjustmentCents ?? 0) / 100);
+                    return (
+                      <tr key={a.id} className="border-t border-border">
+                        <td className="px-4 py-2.5">
+                          <p className="font-medium text-foreground">{a.ownerName ?? a.ownerEmail ?? `Affiliate #${a.id}`}</p>
+                          <p className="text-xs text-muted-foreground">{a.ownerEmail} · <span className="font-mono">{a.code}</span></p>
+                        </td>
+                        <td className="px-3 py-2.5 text-foreground">{a.referralCount}</td>
+                        <td className="px-3 py-2.5 hidden sm:table-cell text-muted-foreground">{a.rate}%</td>
+                        <td className="px-3 py-2.5 text-foreground">{money(a.earningsCents)}</td>
+                        <td className="px-3 py-2.5 font-medium text-foreground">{money(a.availableCents)}</td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center gap-1.5">
+                            <Input
+                              type="number"
+                              step="0.01"
+                              value={draft}
+                              onChange={(e) => setAdjDrafts((p) => ({ ...p, [a.id]: e.target.value }))}
+                              className="h-8 w-24 text-xs"
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-8 text-xs"
+                              disabled={setAdjustment.isPending}
+                              onClick={() => setAdjustment.mutate({ id: a.id, amountCents: Math.round((parseFloat(draft) || 0) * 100) })}
+                            >
+                              Save
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+          <p className="text-xs text-muted-foreground mt-2">
+            Adjustment is added to an affiliate's balance (use a negative value to deduct an already-settled amount). Earnings = commission rate × referred plan revenue.
+          </p>
+        </TabsContent>
+
+        <TabsContent value="payouts" className="mt-4">
+          <Card className="border-border">
+            <CardContent className="p-0 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40">
+                  <tr className="text-left text-xs text-muted-foreground">
+                    <th className="px-4 py-2.5 font-medium">Affiliate</th>
+                    <th className="px-3 py-2.5 font-medium">Method</th>
+                    <th className="px-3 py-2.5 font-medium hidden md:table-cell">Details</th>
+                    <th className="px-3 py-2.5 font-medium">Amount</th>
+                    <th className="px-3 py-2.5 font-medium">Status</th>
+                    <th className="px-3 py-2.5 font-medium text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payoutList.length === 0 ? (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No withdrawal requests</td></tr>
+                  ) : payoutList.map((p) => (
+                    <tr key={p.id} className="border-t border-border align-top">
+                      <td className="px-4 py-2.5">
+                        <p className="font-medium text-foreground">{p.ownerEmail ?? `Request #${p.id}`}</p>
+                        <p className="text-xs text-muted-foreground font-mono">{p.affiliateCode}</p>
+                        <p className="text-xs text-muted-foreground">{fmt(p.createdAt)}</p>
+                      </td>
+                      <td className="px-3 py-2.5 capitalize text-foreground">{p.method}</td>
+                      <td className="px-3 py-2.5 hidden md:table-cell text-xs text-muted-foreground max-w-xs">
+                        {p.details && Object.keys(p.details).length > 0
+                          ? Object.entries(p.details).map(([k, v]) => <div key={k}><span className="capitalize">{k}</span>: {v}</div>)
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-2.5 font-medium text-foreground">{money(p.amountCents)}</td>
+                      <td className="px-3 py-2.5">
+                        <Badge variant="outline" className={cn(
+                          "text-xs capitalize",
+                          p.status === "paid" && "bg-green-500/10 text-green-600 border-green-200",
+                          p.status === "approved" && "bg-blue-500/10 text-blue-600 border-blue-200",
+                          p.status === "rejected" && "bg-red-500/10 text-red-600 border-red-200",
+                          (!p.status || p.status === "pending") && "bg-amber-500/10 text-amber-600 border-amber-200",
+                        )}>{p.status ?? "pending"}</Badge>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1 justify-end flex-wrap">
+                          {p.status !== "paid" && p.status !== "rejected" && (
+                            <>
+                              {p.status === "pending" && (
+                                <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled={setPayoutStatus.isPending} onClick={() => setPayoutStatus.mutate({ id: p.id, status: "approved" })}>
+                                  <Check className="w-3 h-3" />Approve
+                                </Button>
+                              )}
+                              <Button size="sm" variant="outline" className="h-7 text-xs gap-1" disabled={setPayoutStatus.isPending} onClick={() => setPayoutStatus.mutate({ id: p.id, status: "paid" })}>
+                                <DollarSign className="w-3 h-3" />Mark paid
+                              </Button>
+                              <Button size="sm" variant="outline" className="h-7 text-xs gap-1 text-destructive" disabled={setPayoutStatus.isPending} onClick={() => setPayoutStatus.mutate({ id: p.id, status: "rejected" })}>
+                                <X className="w-3 h-3" />Reject
+                              </Button>
+                            </>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

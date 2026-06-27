@@ -246,6 +246,20 @@ CREATE TABLE IF NOT EXISTS "team_members" (
 
 -- Migrations for existing databases (safe to run repeatedly).
 ALTER TABLE "tickets" ADD COLUMN IF NOT EXISTS "contactId" integer;
+ALTER TABLE "affiliates" ADD COLUMN IF NOT EXISTS "adjustmentCents" integer DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS "payout_requests" (
+  "id" serial PRIMARY KEY,
+  "affiliateId" integer NOT NULL,
+  "userId" integer,
+  "amountCents" integer NOT NULL,
+  "method" text NOT NULL,
+  "details" jsonb,
+  "status" text DEFAULT 'pending',
+  "adminNote" text,
+  "createdAt" timestamptz NOT NULL DEFAULT now(),
+  "processedAt" timestamptz
+);
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "passwordHash" text;
 ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "ticketMode" text DEFAULT 'off';
 ALTER TABLE "campaigns" ADD COLUMN IF NOT EXISTS "subject" varchar(512);
