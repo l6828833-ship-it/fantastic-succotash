@@ -2,6 +2,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
+import { useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Onboarding from "./pages/Onboarding";
@@ -198,6 +199,20 @@ function Router() {
 }
 
 function App() {
+  // Capture an affiliate referral code (?ref=CODE) into a cookie so it survives
+  // the GitHub OAuth round-trip and can be attributed when the visitor signs up.
+  useEffect(() => {
+    try {
+      const ref = new URLSearchParams(window.location.search).get("ref");
+      if (ref && /^[A-Za-z0-9]{4,32}$/.test(ref)) {
+        // Persist the referral code for 5 days so it survives the OAuth round-trip.
+        document.cookie = `cbp_ref=${encodeURIComponent(ref)}; path=/; max-age=432000; samesite=lax`;
+      }
+    } catch {
+      // ignore (e.g. cookies disabled)
+    }
+  }, []);
+
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light" switchable>
