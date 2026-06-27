@@ -13,7 +13,6 @@ import Playground from "./pages/Playground";
 import Inbox from "./pages/Inbox";
 import Tickets from "./pages/Tickets";
 import Contacts from "./pages/Contacts";
-import Campaigns from "./pages/Campaigns";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import Analytics from "./pages/Analytics";
 import EmbedCode from "./pages/EmbedCode";
@@ -136,15 +135,6 @@ function Router() {
           <OnboardingGate>
             <AppLayout>
               <Contacts />
-            </AppLayout>
-          </OnboardingGate>
-        </AuthGate>
-      )} />
-      <Route path="/campaigns" component={() => (
-        <AuthGate>
-          <OnboardingGate>
-            <AppLayout>
-              <Campaigns />
             </AppLayout>
           </OnboardingGate>
         </AuthGate>
