@@ -531,8 +531,8 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
                   >
                     {/* Header */}
                     <div className="px-4 py-3 flex items-center gap-3" style={{ backgroundColor: widgetColor }}>
-                      <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center">
-                        <Bot className="w-4 h-4 text-white" />
+                      <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center overflow-hidden shrink-0">
+                        {agent.avatarUrl ? <img src={agent.avatarUrl} alt="" className="w-full h-full object-cover" /> : <Bot className="w-4 h-4 text-white" />}
                       </div>
                       <div>
                         <p className="text-white text-sm font-semibold">{name || "AI Assistant"}</p>
@@ -545,8 +545,8 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
                     {/* Messages */}
                     <div className={cn("p-3 space-y-2", widgetTheme === "dark" ? "bg-gray-900" : "bg-gray-50")}>
                       <div className="flex gap-2">
-                        <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0" style={{ backgroundColor: widgetColor }}>
-                          <Bot className="w-3 h-3 text-white" />
+                        <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 overflow-hidden" style={{ backgroundColor: widgetColor }}>
+                          {agent.avatarUrl ? <img src={agent.avatarUrl} alt="" className="w-full h-full object-cover" /> : <Bot className="w-3 h-3 text-white" />}
                         </div>
                         <div className={cn("rounded-2xl rounded-tl-sm px-3 py-2 text-xs max-w-48", widgetTheme === "dark" ? "bg-gray-700 text-gray-100" : "bg-white text-gray-800 shadow-sm")}>
                           {welcomeMessage || "Hi! How can I help you today?"}
@@ -565,9 +565,9 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
                   </div>
 
                   {/* Launcher button */}
-                  <div className="flex justify-end mt-2">
-                    <div className="w-12 h-12 rounded-full shadow-lg flex items-center justify-center" style={{ backgroundColor: widgetColor }}>
-                      <MessageSquare className="w-5 h-5 text-white" />
+                  <div className={cn("flex mt-3", widgetPosition === "bottom-right" ? "justify-end" : "justify-start")}>
+                    <div className="w-14 h-14 rounded-full shadow-xl flex items-center justify-center overflow-hidden" style={{ backgroundColor: widgetColor }}>
+                      {agent.avatarUrl ? <img src={agent.avatarUrl} alt="" className="w-full h-full object-cover" /> : <MessageSquare className="w-6 h-6 text-white" />}
                     </div>
                   </div>
                 </div>

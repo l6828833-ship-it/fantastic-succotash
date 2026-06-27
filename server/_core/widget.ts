@@ -60,7 +60,7 @@ const WIDGET_JS = `(function(){
     + ".cbp-user{align-self:flex-end;color:#fff;border-bottom-right-radius:4px;}"
     + ".cbp-foot{border-top:1px solid " + border + ";padding:10px;display:flex;gap:8px;background:" + bg + ";}"
     + ".cbp-foot input{flex:1;border:1px solid " + border + ";background:" + bg + ";color:" + fg + ";border-radius:10px;padding:10px 12px;font-size:14px;outline:none;}"
-    + ".cbp-foot button{border:none;border-radius:10px;color:#fff;width:40px;cursor:pointer;display:flex;align-items:center;justify-content:center;}"
+    + ".cbp-foot button{border:none;border-radius:50%;color:#fff;width:42px;height:42px;flex:0 0 auto;cursor:pointer;display:flex;align-items:center;justify-content:center;}"
     + ".cbp-foot button:disabled{opacity:.5;cursor:default;}"
     + ".cbp-foot button svg{width:18px;height:18px;fill:#fff;}"
     + ".cbp-typing{display:flex;gap:4px;padding:4px 2px;}"
