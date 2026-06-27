@@ -15,6 +15,7 @@ import {
   unsubscribeUrl,
 } from "./_core/email";
 import { storagePut } from "./storage";
+import { creditReferralForUpgrade } from "./_core/referral";
 import * as db from "./db";
 
 // ─── Workspace Router ─────────────────────────────────────────────────────────
@@ -45,6 +46,11 @@ const workspaceRouter = router({
         workspace = await db.getWorkspaceByUserId(ctx.user.id);
       }
       await db.updateWorkspace(workspace!.id, input);
+      // If this update upgraded the plan to a paid tier, credit the referring
+      // affiliate for the sale (no-op for free plans or non-referred workspaces).
+      if (input.plan) {
+        await creditReferralForUpgrade({ workspaceId: workspace!.id, plan: input.plan });
+      }
       return db.getWorkspaceByUserId(ctx.user.id);
     }),
 });
@@ -976,6 +982,9 @@ const adminRouter = router({
     .input(z.object({ id: z.number(), plan: z.string() }))
     .mutation(async ({ input }) => {
       await db.updateWorkspace(input.id, { plan: input.plan });
+      // Credit the referring affiliate for the sale (no-op for free plans or
+      // when the workspace wasn't referred).
+      await creditReferralForUpgrade({ workspaceId: input.id, plan: input.plan });
       return { success: true };
     }),
 });

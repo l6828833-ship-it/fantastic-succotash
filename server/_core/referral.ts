@@ -50,9 +50,42 @@ export async function attributeReferral(opts: {
       amount: 0,
       status: "active",
     });
+/**
+ * Credit the referring affiliate when a referred workspace upgrades to a paid
+ * plan. Looks up the workspace owner's email, finds their referral row, and
+ * sets the referral's sale amount (in cents) to the plan's monthly price so the
+ * affiliate's commission reflects the sale. Idempotent and never throws.
+ *
+ * Returns true only when a referral was actually credited/updated.
+ */
+export async function creditReferralForUpgrade(opts: {
+  workspaceId: number;
+  plan: string | null | undefined;
+}): Promise<boolean> {
+  try {
+    const plan = opts.plan ?? null;
+    const priceCents = db.planPriceCents(plan);
+    // Free/unknown/custom-priced plans carry no automatic commission.
+    if (!plan || priceCents <= 0) return false;
+
+    const workspace = await db.getWorkspaceById(opts.workspaceId);
+    if (!workspace) return false;
+    const owner = await db.getUserById(workspace.userId);
+    const email = owner?.email ?? null;
+    if (!email) return false;
+
+    const referral = await db.getReferralByEmail(email);
+    if (!referral) return false;
+
+    // Already credited for this plan at this amount — nothing to do.
+    if (referral.amount === priceCents && referral.plan === plan && referral.status === "active") {
+      return false;
+    }
+
+    await db.updateReferral(referral.id, { amount: priceCents, plan, status: "active" });
     return true;
   } catch (error) {
-    console.error("[Referral] attribution failed", error);
+    console.error("[Referral] upgrade credit failed", error);
     return false;
   }
 }
