@@ -47,11 +47,48 @@ const WIDGET_JS = `(function(){
   var agentName = "Assistant";
   var welcome = "Hi! How can I help you today?";
 
+  // Lead capture + readiness state. configLoaded flips true once the agent
+  // config request settles so the open flow knows whether to greet or first
+  // show the lead form.
+  var configLoaded = false;
+  var leadRequired = false;
+  var leadDone = !!conversationId; // returning visitors already provided details
+  var leadForm = null;
+
+  // Launcher icon presets. The default "chat" icon is available on every plan;
+  // the rest are premium and require a paid plan. Values are filled SVGs (the
+  // launcher CSS paints them white).
+  var ICONS = {
+    chat: '<svg viewBox="0 0 24 24"><path d="M12 3C6.5 3 2 6.8 2 11.5c0 2.4 1.2 4.6 3.1 6.1L4 21l4-1.6c1.2.4 2.6.6 4 .6 5.5 0 10-3.8 10-8.5S17.5 3 12 3z"/></svg>',
+    message: '<svg viewBox="0 0 24 24"><path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/></svg>',
+    help: '<svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm1 15h-2v-2h2v2zm1.8-6.3l-.9.9c-.6.6-.9 1.1-.9 2.4h-2v-.5c0-1 .4-1.9 1.1-2.6l1.2-1.2c.4-.4.6-.9.6-1.4a2 2 0 0 0-4 0H8a4 4 0 0 1 8 0c0 .8-.3 1.5-.9 2.1z"/></svg>',
+    sparkles: '<svg viewBox="0 0 24 24"><path d="M12 2l2.4 6.6L21 11l-6.6 2.4L12 20l-2.4-6.6L3 11l6.6-2.4z"/></svg>',
+    bell: '<svg viewBox="0 0 24 24"><path d="M12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22zm7-5l-1.6-1.6V11a5.4 5.4 0 0 0-4-5.2V5a1.4 1.4 0 0 0-2.8 0v.8A5.4 5.4 0 0 0 6.6 11v4.4L5 17v1h14v-1z"/></svg>',
+    phone: '<svg viewBox="0 0 24 24"><path d="M6.6 10.8c1.4 2.8 3.8 5.2 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.4 0 .8-.3 1z"/></svg>',
+    zap: '<svg viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 10-12h-7z"/></svg>',
+    heart: '<svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>'
+  };
+  var FREE_ICON = "chat";
+  var PREMIUM_ICONS = { message: 1, help: 1, sparkles: 1, bell: 1, phone: 1, zap: 1, heart: 1 };
+
+  function launcherMarkup(iconId, plan){
+    var id = iconId || FREE_ICON;
+    // Allow an uploaded image URL too.
+    if (/^(https?:)?\\/\\//.test(id) || id.charAt(0) === "/") {
+      return '<img src="' + id + '" alt="">';
+    }
+    var paid = plan && plan !== "starter" && plan !== "free";
+    if (!ICONS[id]) id = FREE_ICON;
+    if (PREMIUM_ICONS[id] && !paid) id = FREE_ICON; // enforce gating on the widget too
+    return ICONS[id];
+  }
+
   function buildCss(){
     return ""
       + ".cbp-launcher{position:fixed;bottom:20px;" + side + ":20px;width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.25);z-index:2147483000;display:flex;align-items:center;justify-content:center;transition:transform .15s ease;}"
       + ".cbp-launcher:hover{transform:scale(1.06);}"
       + ".cbp-launcher svg{width:26px;height:26px;fill:#fff;}"
+      + ".cbp-launcher img{width:30px;height:30px;border-radius:8px;object-fit:cover;}"
       + ".cbp-panel{position:fixed;bottom:88px;" + side + ":20px;width:" + panelW + "px;max-width:calc(100vw - 40px);height:560px;max-height:calc(100vh - 120px);background:" + bg + ";color:" + fg + ";border:1px solid " + border + ";border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.28);z-index:2147483000;display:none;flex-direction:column;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;}"
       + ".cbp-panel.cbp-open{display:flex;}"
       + ".cbp-head{padding:14px 16px;color:#fff;display:flex;align-items:center;gap:10px;}"
@@ -72,7 +109,15 @@ const WIDGET_JS = `(function(){
       + ".cbp-typing span{width:7px;height:7px;border-radius:50%;background:#9ca3af;animation:cbpb 1s infinite;}"
       + ".cbp-typing span:nth-child(2){animation-delay:.15s;}.cbp-typing span:nth-child(3){animation-delay:.3s;}"
       + "@keyframes cbpb{0%,60%,100%{opacity:.3;transform:translateY(0);}30%{opacity:1;transform:translateY(-3px);}}"
-      + ".cbp-foot{align-items:center;}";
+      + ".cbp-foot{align-items:center;}"
+      + ".cbp-lead{padding:18px;display:flex;flex-direction:column;gap:12px;}"
+      + ".cbp-lead h4{margin:0;font-size:15px;font-weight:600;color:" + fg + ";}"
+      + ".cbp-lead p{margin:0 0 2px;font-size:13px;color:" + (dark ? "#9ca3af" : "#6b7280") + ";}"
+      + ".cbp-lead label{font-size:12px;font-weight:600;color:" + fg + ";display:block;margin-bottom:4px;}"
+      + ".cbp-lead input{width:100%;box-sizing:border-box;border:1px solid " + border + ";background:" + bg + ";color:" + fg + ";border-radius:10px;padding:10px 12px;font-size:14px;outline:none;}"
+      + ".cbp-lead .cbp-start{border:none;border-radius:10px;color:#fff;padding:11px;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;}"
+      + ".cbp-lead .cbp-start:disabled{opacity:.6;cursor:default;}"
+      + ".cbp-lead .cbp-err{color:#ef4444;font-size:12px;min-height:14px;}";
   }
 
   // Recompute every visual value from the current settings and repaint. Safe to
@@ -162,10 +207,84 @@ const WIDGET_JS = `(function(){
     return d;
   }
 
+  function openFlow(){
+    if (!open || !configLoaded) return;
+    if (leadRequired && !leadDone){ showLeadForm(); return; }
+    if (!greeted){ greeted = true; addMsg("bot", welcome); input.focus(); }
+  }
+
+  function showLeadForm(){
+    foot.style.display = "none";
+    if (leadForm){ return; }
+    leadForm = document.createElement("div");
+    leadForm.className = "cbp-lead";
+    var title = document.createElement("h4");
+    title.textContent = "Before we start";
+    var desc = document.createElement("p");
+    desc.textContent = "Please share your details so we can assist you better.";
+    var nameWrap = document.createElement("div");
+    var nameLabel = document.createElement("label");
+    nameLabel.textContent = "Name";
+    var leadName = document.createElement("input");
+    leadName.type = "text";
+    leadName.placeholder = "Your name";
+    nameWrap.appendChild(nameLabel);
+    nameWrap.appendChild(leadName);
+    var emailWrap = document.createElement("div");
+    var emailLabel = document.createElement("label");
+    emailLabel.textContent = "Email";
+    var leadEmail = document.createElement("input");
+    leadEmail.type = "email";
+    leadEmail.placeholder = "you@example.com";
+    emailWrap.appendChild(emailLabel);
+    emailWrap.appendChild(leadEmail);
+    var err = document.createElement("div");
+    err.className = "cbp-err";
+    var startBtn = document.createElement("button");
+    startBtn.className = "cbp-start";
+    startBtn.style.background = color;
+    startBtn.textContent = "Start chat";
+
+    function submitLead(){
+      var nm = (leadName.value || "").trim();
+      var em = (leadEmail.value || "").trim();
+      if (!nm){ err.textContent = "Please enter your name."; leadName.focus(); return; }
+      if (!/^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$/.test(em)){ err.textContent = "Please enter a valid email."; leadEmail.focus(); return; }
+      err.textContent = "";
+      startBtn.disabled = true; startBtn.textContent = "Starting...";
+      fetch(apiBase + "/widget/lead", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: agentId, conversationId: conversationId, name: nm, email: em })
+      }).then(function(r){ return r.json(); }).then(function(d){
+        if (d && d.conversationId){ conversationId = String(d.conversationId); try { localStorage.setItem(storeKey, conversationId); } catch(e){} }
+      }).catch(function(){}).then(function(){
+        leadDone = true;
+        if (leadForm && leadForm.parentNode){ leadForm.parentNode.removeChild(leadForm); }
+        leadForm = null;
+        foot.style.display = "flex";
+        if (!greeted){ greeted = true; addMsg("bot", welcome); }
+        input.focus();
+      });
+    }
+
+    startBtn.addEventListener("click", submitLead);
+    leadEmail.addEventListener("keydown", function(e){ if (e.key === "Enter"){ e.preventDefault(); submitLead(); } });
+
+    leadForm.appendChild(title);
+    leadForm.appendChild(desc);
+    leadForm.appendChild(nameWrap);
+    leadForm.appendChild(emailWrap);
+    leadForm.appendChild(err);
+    leadForm.appendChild(startBtn);
+    body.appendChild(leadForm);
+    leadName.focus();
+  }
+
   function toggle(){
     open = !open;
     panel.className = "cbp-panel" + (open ? " cbp-open" : "");
-    if (open && !greeted){ greeted = true; addMsg("bot", welcome); input.focus(); }
+    if (open) openFlow();
   }
 
   function send(){
@@ -207,7 +326,14 @@ const WIDGET_JS = `(function(){
     if (a.theme) settings.theme = a.theme === "dark" ? "dark" : "light";
     applySettings();
     if (a.avatarUrl){ avatar.innerHTML = '<img src="' + a.avatarUrl + '" alt="">'; }
-  }).catch(function(){});
+    // Launcher icon (preset id or uploaded URL), gated by the workspace plan.
+    launcher.innerHTML = launcherMarkup(a.launcherIcon, a.plan);
+    leadRequired = !!a.leadCapture;
+  }).catch(function(){}).then(function(){
+    // Always mark config resolved so the open flow can proceed (greet or lead).
+    configLoaded = true;
+    if (open) openFlow();
+  });
 
   document.body.appendChild(launcher);
   document.body.appendChild(panel);
@@ -231,6 +357,9 @@ export function registerWidgetRoutes(app: Express) {
         res.status(404).json({ error: "Agent not found" });
         return;
       }
+      // The workspace plan gates which launcher icons are allowed (free plan
+      // can only use the default chat icon; premium icons need a paid plan).
+      const workspace = await db.getWorkspaceById(agent.workspaceId);
       res.json({
         id: agent.id,
         name: agent.name,
@@ -240,11 +369,85 @@ export function registerWidgetRoutes(app: Express) {
         size: agent.widgetSize ?? "standard",
         theme: agent.widgetTheme ?? "light",
         avatarUrl: agent.avatarUrl ?? null,
+        launcherIcon: agent.launcherIconUrl ?? "chat",
+        leadCapture: agent.leadCaptureEnabled ?? false,
+        leadFields: (agent.leadCaptureFields && agent.leadCaptureFields.length > 0) ? agent.leadCaptureFields : ["name", "email"],
+        plan: workspace?.plan ?? "starter",
         isActive: agent.isActive ?? true,
       });
     } catch (error) {
       console.error("[Widget] agent config failed", error);
       res.status(500).json({ error: "Failed to load agent" });
+    }
+  });
+
+  app.options("/api/widget/lead", (_req: Request, res: Response) => {
+    setCors(res);
+    res.sendStatus(204);
+  });
+
+  // Public lead-capture endpoint. Called by the widget before the conversation
+  // starts when lead capture is enabled. Records the visitor's name/email on the
+  // conversation and upserts a workspace contact so it shows up in the CRM/inbox.
+  app.post("/api/widget/lead", async (req: Request, res: Response) => {
+    setCors(res);
+    const fallbackConversationId =
+      req.body && (req.body as { conversationId?: string | number }).conversationId != null
+        ? Number((req.body as { conversationId?: string | number }).conversationId)
+        : null;
+    try {
+      const body = (req.body ?? {}) as { agentId?: string | number; conversationId?: string | number; name?: string; email?: string };
+      const agentId = Number(body.agentId);
+      const name = String(body.name ?? "").trim().slice(0, 200);
+      const email = String(body.email ?? "").trim().slice(0, 320);
+      if (!agentId || (!name && !email)) {
+        res.status(400).json({ error: "agentId and at least one of name/email are required" });
+        return;
+      }
+
+      const agent = await db.getAgentById(agentId);
+      if (!agent) {
+        res.status(404).json({ error: "Agent not found" });
+        return;
+      }
+
+      // Reuse the existing conversation if one was already started, otherwise
+      // create a fresh one pre-populated with the visitor details.
+      let conversationId = body.conversationId ? Number(body.conversationId) : null;
+      let conv = conversationId ? await db.getConversationById(conversationId) : undefined;
+      if (!conv || conv.workspaceId !== agent.workspaceId) conv = undefined;
+      if (!conv) {
+        conv = await db.createConversation({
+          workspaceId: agent.workspaceId,
+          agentId: agent.id,
+          channel: "web",
+          visitorId: `widget_${Date.now()}`,
+          visitorName: name || null,
+          visitorEmail: email || null,
+        });
+      } else {
+        await db.updateConversation(conv.id, {
+          visitorName: name || conv.visitorName,
+          visitorEmail: email || conv.visitorEmail,
+        });
+      }
+      conversationId = conv?.id ?? null;
+
+      // Upsert a contact (deduped by email within the workspace).
+      if (email) {
+        const existing = await db.findContactByEmail(agent.workspaceId, email);
+        if (existing) {
+          await db.updateContact(existing.id, { name: name || existing.name, lastSeenAt: new Date() });
+        } else {
+          await db.createContact({ workspaceId: agent.workspaceId, name: name || null, email, channel: "web", lastSeenAt: new Date() });
+        }
+      }
+
+      res.json({ conversationId });
+    } catch (error) {
+      console.error("[Widget] lead capture failed", error);
+      // Degrade gracefully so the visitor can still chat.
+      res.status(200).json({ conversationId: fallbackConversationId });
     }
   });
 

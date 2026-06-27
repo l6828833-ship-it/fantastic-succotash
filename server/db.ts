@@ -98,6 +98,13 @@ export async function getWorkspaceByUserId(userId: number) {
   return result[0];
 }
 
+export async function getWorkspaceById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(workspaces).where(eq(workspaces.id, id)).limit(1);
+  return result[0];
+}
+
 export async function createWorkspace(data: { userId: number }) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
