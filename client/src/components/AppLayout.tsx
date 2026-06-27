@@ -10,6 +10,7 @@ import {
   CheckCheck,
   ChevronDown,
   Code2,
+  Gift,
   Inbox,
   LayoutDashboard,
   LogOut,
@@ -46,6 +47,7 @@ const navItems = [
   { href: "/knowledge", icon: BookOpen, label: "Knowledge Base" },
   { href: "/analytics", icon: BarChart3, label: "Analytics" },
   { href: "/embed", icon: Code2, label: "Embed Code" },
+  { href: "/affiliate", icon: Gift, label: "Affiliate" },
 ];
 
 const NOTIF_ICONS: Record<string, string> = {

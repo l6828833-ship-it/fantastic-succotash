@@ -299,3 +299,30 @@ export const teamMembers = pgTable("team_members", {
 
 export type TeamMember = typeof teamMembers.$inferSelect;
 export type InsertTeamMember = typeof teamMembers.$inferInsert;
+
+// ─── Affiliates ───────────────────────────────────────────────────────────────
+export const affiliates = pgTable("affiliates", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId").notNull().unique(),
+  workspaceId: integer("workspaceId"),
+  code: varchar("code", { length: 32 }).notNull().unique(),
+  createdAt: ts("createdAt").defaultNow().notNull(),
+  updatedAt: ts("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+export type Affiliate = typeof affiliates.$inferSelect;
+
+// ─── Referrals ──────────────────────────────────────────────────────────────--
+export const referrals = pgTable("referrals", {
+  id: serial("id").primaryKey(),
+  affiliateId: integer("affiliateId").notNull(),
+  referredName: varchar("referredName", { length: 255 }),
+  referredEmail: varchar("referredEmail", { length: 320 }),
+  plan: varchar("plan", { length: 64 }).default("starter"),
+  // Attributed monthly revenue from this referral, stored in cents.
+  amount: integer("amount").default(0),
+  status: text("status").$type<"pending" | "active" | "cancelled">().default("pending"),
+  createdAt: ts("createdAt").defaultNow().notNull(),
+});
+
+export type Referral = typeof referrals.$inferSelect;
