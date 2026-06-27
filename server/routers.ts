@@ -528,8 +528,10 @@ const contactsRouter = router({
   }),
   stats: protectedProcedure.query(async ({ ctx }) => {
     const workspace = await db.getWorkspaceByUserId(ctx.user.id);
-    if (!workspace) return { total: 0, subscribed: 0, active30d: 0, openTickets: 0 };
-    return db.getContactStats(workspace.id);
+    if (!workspace) return { total: 0, subscribed: 0, active30d: 0, openTickets: 0, plan: "starter", limit: 100 };
+    const stats = await db.getContactStats(workspace.id);
+    const limit = db.contactLimitForPlan(workspace.plan);
+    return { ...stats, plan: workspace.plan ?? "starter", limit: Number.isFinite(limit) ? limit : null };
   }),
   get: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
     return db.getContactById(input.id);
@@ -548,6 +550,16 @@ const contactsRouter = router({
     .mutation(async ({ ctx, input }) => {
       const workspace = await db.getWorkspaceByUserId(ctx.user.id);
       if (!workspace) throw new TRPCError({ code: "BAD_REQUEST", message: "No workspace found" });
+      const limit = db.contactLimitForPlan(workspace.plan);
+      if (Number.isFinite(limit)) {
+        const count = await db.countContactsByWorkspace(workspace.id);
+        if (count >= limit) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: `You've reached your plan's limit of ${limit} contacts. Upgrade your plan or remove some contacts to add more.`,
+          });
+        }
+      }
       return db.createContact({ ...input, workspaceId: workspace.id, lastSeenAt: new Date() });
     }),
   update: protectedProcedure

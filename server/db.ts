@@ -579,6 +579,27 @@ export async function getContactsByWorkspace(workspaceId: number) {
   return db.select().from(contacts).where(eq(contacts.workspaceId, workspaceId)).orderBy(desc(contacts.updatedAt));
 }
 
+// Per-plan contact storage limits. The free "starter" plan stores up to 100
+// contacts; higher plans store more. Use Infinity for "unlimited".
+export const CONTACT_LIMITS: Record<string, number> = {
+  starter: 100,
+  free: 100,
+  growth: 5000,
+  enterprise: Number.POSITIVE_INFINITY,
+};
+
+export function contactLimitForPlan(plan?: string | null): number {
+  if (!plan) return CONTACT_LIMITS.starter;
+  return CONTACT_LIMITS[plan] ?? CONTACT_LIMITS.starter;
+}
+
+export async function countContactsByWorkspace(workspaceId: number) {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db.select({ count: sql<number>`count(*)` }).from(contacts).where(eq(contacts.workspaceId, workspaceId));
+  return Number(result[0]?.count ?? 0);
+}
+
 export async function getContactById(id: number) {
   const db = await getDb();
   if (!db) return undefined;

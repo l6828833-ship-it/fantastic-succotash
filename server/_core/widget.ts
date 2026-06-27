@@ -496,13 +496,20 @@ export function registerWidgetRoutes(app: Express) {
       }
       conversationId = conv?.id ?? null;
 
-      // Upsert a contact (deduped by email within the workspace).
+      // Upsert a contact (deduped by email within the workspace), respecting the
+      // workspace's plan contact limit for brand-new contacts.
       if (email) {
         const existing = await db.findContactByEmail(agent.workspaceId, email);
         if (existing) {
           await db.updateContact(existing.id, { name: name || existing.name, lastSeenAt: new Date() });
         } else {
-          await db.createContact({ workspaceId: agent.workspaceId, name: name || null, email, channel: "web", lastSeenAt: new Date() });
+          const ws = await db.getWorkspaceById(agent.workspaceId);
+          const limit = db.contactLimitForPlan(ws?.plan);
+          const underLimit = !Number.isFinite(limit) || (await db.countContactsByWorkspace(agent.workspaceId)) < limit;
+          if (underLimit) {
+            await db.createContact({ workspaceId: agent.workspaceId, name: name || null, email, channel: "web", lastSeenAt: new Date() });
+          }
+          // At the limit: skip storing the contact, but the chat still works.
         }
       }
 
