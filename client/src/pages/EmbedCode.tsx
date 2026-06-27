@@ -72,9 +72,11 @@ function chatbotpro_widget() {
         agentId: "<?php echo esc_js('${selectedAgent.id}'); ?>",
         color: "<?php echo esc_js('${selectedAgent.widgetColor ?? "#6366f1"}'); ?>",
         position: "<?php echo esc_js('${selectedAgent.widgetPosition ?? "bottom-right"}'); ?>",
+        theme: "<?php echo esc_js('${selectedAgent.widgetTheme ?? "light"}'); ?>",
+        apiBase: "${origin}/api",
       };
     </script>
-    <script src="https://cdn.chatbotpro.ai/widget/v1/embed.js" async defer></script>
+    <script src="${origin}/widget/embed.js" async defer></script>
     <?php
 }
 add_action('wp_footer', 'chatbotpro_widget');`
