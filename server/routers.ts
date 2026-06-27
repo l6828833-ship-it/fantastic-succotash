@@ -927,8 +927,6 @@ const uploadRouter = router({
 // ─── Affiliate Router ─────────────────────────────────────────────────────────
 const genAffiliateCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
 
-const genAffiliateCode = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 8);
-
 // Minimum withdrawal amount an affiliate can request.
 const MIN_WITHDRAWAL_CENTS = 2500;
 
