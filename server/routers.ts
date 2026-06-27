@@ -354,6 +354,49 @@ const ticketsRouter = router({
       return { success: true };
     }),
 });
+// ─── Canned Responses (Quick Replies) Router ──────────────────────────────────
+const cannedResponsesRouter = router({
+  list: protectedProcedure.query(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) return [];
+    return db.getCannedResponsesByWorkspace(workspace.id);
+  }),
+  create: protectedProcedure
+    .input(z.object({
+      title: z.string().min(1),
+      content: z.string().min(1),
+      category: z.string().optional(),
+      shortcut: z.string().optional(),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) throw new TRPCError({ code: "BAD_REQUEST", message: "No workspace found" });
+      return db.createCannedResponse({ ...input, workspaceId: workspace.id });
+    }),
+  update: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      title: z.string().optional(),
+      content: z.string().optional(),
+      category: z.string().optional(),
+      shortcut: z.string().optional().nullable(),
+    }))
+    .mutation(async ({ input }) => {
+      const { id, ...data } = input;
+      return db.updateCannedResponse(id, data);
+    }),
+  use: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ input }) => {
+      await db.incrementCannedResponseUsage(input.id);
+      return { success: true };
+    }),
+  delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
+    await db.deleteCannedResponse(input.id);
+    return { success: true };
+  }),
+});
+
 // ─── Campaigns Router ─────────────────────────────────────────────────────────
 const campaignsRouter = router({
   list: protectedProcedure.query(async ({ ctx }) => {
@@ -567,6 +610,7 @@ export const appRouter = router({
   knowledge: knowledgeRouter,
   inbox: inboxRouter,
   tickets: ticketsRouter,
+  cannedResponses: cannedResponsesRouter,
   campaigns: campaignsRouter,
   analytics: analyticsRouter,
   notifications: notificationsRouter,
