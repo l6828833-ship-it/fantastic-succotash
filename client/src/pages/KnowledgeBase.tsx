@@ -172,7 +172,7 @@ export default function KnowledgeBase() {
                 <DialogTrigger asChild>
                   <Button size="sm" className="gap-2"><Plus className="w-4 h-4" />New Article</Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-2xl">
+                <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>{editingArticleId ? "Edit Article" : "New Article"}</DialogTitle>
                   </DialogHeader>
@@ -199,7 +199,7 @@ export default function KnowledgeBase() {
                         value={articleContent}
                         onChange={(e) => setArticleContent(e.target.value)}
                         rows={8}
-                        className="resize-none"
+                        className="resize-y max-h-[45vh] overflow-y-auto"
                       />
                     </div>
                     <Button className="w-full" onClick={handleSaveArticle} disabled={createArticle.isPending || updateArticle.isPending}>
@@ -215,7 +215,7 @@ export default function KnowledgeBase() {
                 <DialogTrigger asChild>
                   <Button size="sm" className="gap-2"><Plus className="w-4 h-4" />Add Q&A Pair</Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-xl">
+                <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>{editingQaId ? "Edit Q&A Pair" : "New Q&A Pair"}</DialogTitle>
                   </DialogHeader>
@@ -231,7 +231,7 @@ export default function KnowledgeBase() {
                         value={qaAnswer}
                         onChange={(e) => setQaAnswer(e.target.value)}
                         rows={5}
-                        className="resize-none"
+                        className="resize-y max-h-[45vh] overflow-y-auto"
                       />
                     </div>
                     <Button className="w-full" onClick={handleSaveQA} disabled={createQA.isPending || updateQA.isPending}>
