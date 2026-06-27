@@ -1,9 +1,10 @@
 import { and, desc, eq, sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/mysql2";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 import {
   InsertUser,
   agents,
-  analyticsEvents,
+  cannedResponses,
   campaigns,
   conversations,
   knowledgeArticles,
@@ -18,12 +19,24 @@ import {
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
+let _client: ReturnType<typeof postgres> | null = null;
 let _db: ReturnType<typeof drizzle> | null = null;
 
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      _db = drizzle(process.env.DATABASE_URL);
+      const url = process.env.DATABASE_URL;
+      // Supabase (and most managed Postgres) require TLS. Allow opting out via
+      // ?sslmode=disable for local development.
+      const disableSsl = /sslmode=disable/i.test(url);
+      _client = postgres(url, {
+        // The Supabase transaction pooler (port 6543) does not support prepared
+        // statements; disabling them keeps both pooler and direct connections working.
+        prepare: false,
+        ssl: disableSsl ? false : "require",
+        max: 5,
+      });
+      _db = drizzle(_client);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
       _db = null;
@@ -65,7 +78,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   if (!values.lastSignedIn) values.lastSignedIn = new Date();
   if (Object.keys(updateSet).length === 0) updateSet.lastSignedIn = new Date();
 
-  await db.insert(users).values(values).onDuplicateKeyUpdate({ set: updateSet });
+  await db.insert(users).values(values).onConflictDoUpdate({ target: users.openId, set: updateSet });
 }
 
 export async function getUserByOpenId(openId: string) {
@@ -86,8 +99,8 @@ export async function getWorkspaceByUserId(userId: number) {
 export async function createWorkspace(data: { userId: number }) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(workspaces).values({ userId: data.userId });
-  return result[0];
+  const [row] = await db.insert(workspaces).values({ userId: data.userId }).returning();
+  return row;
 }
 
 export async function updateWorkspace(id: number, data: Partial<typeof workspaces.$inferInsert>) {
@@ -113,16 +126,15 @@ export async function getAgentById(id: number) {
 export async function createAgent(data: typeof agents.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(agents).values(data);
-  const insertId = (result as unknown as [{ insertId: number }])[0]?.insertId;
-  return getAgentById(insertId);
+  const [row] = await db.insert(agents).values(data).returning();
+  return row;
 }
 
 export async function updateAgent(id: number, data: Partial<typeof agents.$inferInsert>) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  await db.update(agents).set(data).where(eq(agents.id, id));
-  return getAgentById(id);
+  const [row] = await db.update(agents).set(data).where(eq(agents.id, id)).returning();
+  return row;
 }
 
 export async function deleteAgent(id: number) {
@@ -148,16 +160,15 @@ export async function getArticleById(id: number) {
 export async function createArticle(data: typeof knowledgeArticles.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(knowledgeArticles).values(data);
-  const insertId = (result as unknown as [{ insertId: number }])[0]?.insertId;
-  return getArticleById(insertId);
+  const [row] = await db.insert(knowledgeArticles).values(data).returning();
+  return row;
 }
 
 export async function updateArticle(id: number, data: Partial<typeof knowledgeArticles.$inferInsert>) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  await db.update(knowledgeArticles).set(data).where(eq(knowledgeArticles.id, id));
-  return getArticleById(id);
+  const [row] = await db.update(knowledgeArticles).set(data).where(eq(knowledgeArticles.id, id)).returning();
+  return row;
 }
 
 export async function deleteArticle(id: number) {
@@ -176,18 +187,15 @@ export async function getQAPairsByWorkspace(workspaceId: number) {
 export async function createQAPair(data: typeof qaPairs.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(qaPairs).values(data);
-  const insertId = (result as unknown as [{ insertId: number }])[0]?.insertId;
-  const rows = await db.select().from(qaPairs).where(eq(qaPairs.id, insertId)).limit(1);
-  return rows[0];
+  const [row] = await db.insert(qaPairs).values(data).returning();
+  return row;
 }
 
 export async function updateQAPair(id: number, data: Partial<typeof qaPairs.$inferInsert>) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  await db.update(qaPairs).set(data).where(eq(qaPairs.id, id));
-  const rows = await db.select().from(qaPairs).where(eq(qaPairs.id, id)).limit(1);
-  return rows[0];
+  const [row] = await db.update(qaPairs).set(data).where(eq(qaPairs.id, id)).returning();
+  return row;
 }
 
 export async function deleteQAPair(id: number) {
@@ -215,16 +223,15 @@ export async function getConversationById(id: number) {
 export async function createConversation(data: typeof conversations.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(conversations).values(data);
-  const insertId = (result as unknown as [{ insertId: number }])[0]?.insertId;
-  return getConversationById(insertId);
+  const [row] = await db.insert(conversations).values(data).returning();
+  return row;
 }
 
 export async function updateConversation(id: number, data: Partial<typeof conversations.$inferInsert>) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  await db.update(conversations).set(data).where(eq(conversations.id, id));
-  return getConversationById(id);
+  const [row] = await db.update(conversations).set(data).where(eq(conversations.id, id)).returning();
+  return row;
 }
 
 // ─── Messages ─────────────────────────────────────────────────────────────────
@@ -237,10 +244,8 @@ export async function getMessagesByConversation(conversationId: number) {
 export async function createMessage(data: typeof messages.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(messages).values(data);
-  const insertId = (result as unknown as [{ insertId: number }])[0]?.insertId;
-  const rows = await db.select().from(messages).where(eq(messages.id, insertId)).limit(1);
-  return rows[0];
+  const [row] = await db.insert(messages).values(data).returning();
+  return row;
 }
 
 // ─── Tickets ──────────────────────────────────────────────────────────────────
@@ -262,16 +267,15 @@ export async function getTicketById(id: number) {
 export async function createTicket(data: typeof tickets.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(tickets).values(data);
-  const insertId = (result as unknown as [{ insertId: number }])[0]?.insertId;
-  return getTicketById(insertId);
+  const [row] = await db.insert(tickets).values(data).returning();
+  return row;
 }
 
 export async function updateTicket(id: number, data: Partial<typeof tickets.$inferInsert>) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  await db.update(tickets).set(data).where(eq(tickets.id, id));
-  return getTicketById(id);
+  const [row] = await db.update(tickets).set(data).where(eq(tickets.id, id)).returning();
+  return row;
 }
 
 export async function deleteTicket(id: number) {
@@ -279,26 +283,124 @@ export async function deleteTicket(id: number) {
   if (!db) throw new Error("DB not available");
   await db.delete(tickets).where(eq(tickets.id, id));
 }
+
 // ─── Ticket Notes ────────────────────────────────────────────────────────────────
 export async function getNotesByTicket(ticketId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(ticketNotes).where(eq(ticketNotes.ticketId, ticketId)).orderBy(ticketNotes.createdAt);
 }
+
 export async function createTicketNote(data: typeof ticketNotes.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const [result] = await db.insert(ticketNotes).values(data);
-  const insertId = (result as { insertId?: number })?.insertId;
-  if (!insertId) return null;
-  const [note] = await db.select().from(ticketNotes).where(eq(ticketNotes.id, insertId)).limit(1);
+  const [note] = await db.insert(ticketNotes).values(data).returning();
   return note ?? null;
 }
+
 export async function deleteTicketNote(id: number) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   await db.delete(ticketNotes).where(eq(ticketNotes.id, id));
 }
+
+// ─── Canned Responses (Quick Replies) ─────────────────────────────────────────
+const DEFAULT_CANNED_RESPONSES: Array<{ title: string; content: string; category: string; shortcut: string }> = [
+  {
+    title: "Greeting",
+    content: "Hi {{name}}, thanks for reaching out! My name is here to help. How can I assist you today?",
+    category: "Greetings",
+    shortcut: "/hi",
+  },
+  {
+    title: "Acknowledge & investigate",
+    content: "Thanks for the details, {{name}}. I'm looking into this for you right now and will get back to you shortly.",
+    category: "General",
+    shortcut: "/look",
+  },
+  {
+    title: "Ask for more info",
+    content: "To help me resolve this faster, could you please share a bit more detail (such as your account email, order number, or a screenshot of the issue)?",
+    category: "General",
+    shortcut: "/info",
+  },
+  {
+    title: "Apologize for the inconvenience",
+    content: "I'm really sorry for the inconvenience this has caused, {{name}}. Let's get this sorted out for you as quickly as possible.",
+    category: "General",
+    shortcut: "/sorry",
+  },
+  {
+    title: "Issue resolved",
+    content: "Glad I could help, {{name}}! I'll go ahead and mark this as resolved. Feel free to reach out anytime if you need anything else.",
+    category: "Closing",
+    shortcut: "/done",
+  },
+  {
+    title: "Closing & follow-up",
+    content: "Is there anything else I can help you with today? If not, have a wonderful day!",
+    category: "Closing",
+    shortcut: "/bye",
+  },
+];
+
+export async function getCannedResponsesByWorkspace(workspaceId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const existing = await db
+    .select()
+    .from(cannedResponses)
+    .where(eq(cannedResponses.workspaceId, workspaceId))
+    .orderBy(desc(cannedResponses.usageCount), desc(cannedResponses.updatedAt));
+  if (existing.length > 0) return existing;
+
+  // Seed sensible defaults the first time a workspace opens quick replies.
+  await db.insert(cannedResponses).values(
+    DEFAULT_CANNED_RESPONSES.map((r) => ({ ...r, workspaceId }))
+  );
+  return db
+    .select()
+    .from(cannedResponses)
+    .where(eq(cannedResponses.workspaceId, workspaceId))
+    .orderBy(desc(cannedResponses.usageCount), desc(cannedResponses.updatedAt));
+}
+
+export async function getCannedResponseById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(cannedResponses).where(eq(cannedResponses.id, id)).limit(1);
+  return result[0];
+}
+
+export async function createCannedResponse(data: typeof cannedResponses.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.insert(cannedResponses).values(data).returning();
+  return row;
+}
+
+export async function updateCannedResponse(id: number, data: Partial<typeof cannedResponses.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.update(cannedResponses).set(data).where(eq(cannedResponses.id, id)).returning();
+  return row;
+}
+
+export async function incrementCannedResponseUsage(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db
+    .update(cannedResponses)
+    .set({ usageCount: sql`${cannedResponses.usageCount} + 1` })
+    .where(eq(cannedResponses.id, id));
+}
+
+export async function deleteCannedResponse(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(cannedResponses).where(eq(cannedResponses.id, id));
+}
+
 // ─── Campaigns ────────────────────────────────────────────────────────────────
 export async function getCampaignsByWorkspace(workspaceId: number) {
   const db = await getDb();
@@ -316,16 +418,15 @@ export async function getCampaignById(id: number) {
 export async function createCampaign(data: typeof campaigns.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const result = await db.insert(campaigns).values(data);
-  const insertId = (result as unknown as [{ insertId: number }])[0]?.insertId;
-  return getCampaignById(insertId);
+  const [row] = await db.insert(campaigns).values(data).returning();
+  return row;
 }
 
 export async function updateCampaign(id: number, data: Partial<typeof campaigns.$inferInsert>) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  await db.update(campaigns).set(data).where(eq(campaigns.id, id));
-  return getCampaignById(id);
+  const [row] = await db.update(campaigns).set(data).where(eq(campaigns.id, id)).returning();
+  return row;
 }
 
 export async function deleteCampaign(id: number) {
@@ -369,7 +470,7 @@ export async function getAnalyticsSummary(workspaceId: number) {
   const total = await db.select({ count: sql<number>`count(*)` }).from(conversations).where(eq(conversations.workspaceId, workspaceId));
   const resolved = await db.select({ count: sql<number>`count(*)` }).from(conversations).where(and(eq(conversations.workspaceId, workspaceId), eq(conversations.status, "resolved")));
   const escalated = await db.select({ count: sql<number>`count(*)` }).from(conversations).where(and(eq(conversations.workspaceId, workspaceId), eq(conversations.isEscalated, true)));
-  const csatResult = await db.select({ avg: sql<number>`avg(csatScore)` }).from(conversations).where(and(eq(conversations.workspaceId, workspaceId)));
+  const csatResult = await db.select({ avg: sql<number>`avg(${conversations.csatScore})` }).from(conversations).where(and(eq(conversations.workspaceId, workspaceId)));
 
   return {
     total: Number(total[0]?.count ?? 0),
@@ -384,13 +485,13 @@ export async function getConversationsByDay(workspaceId: number) {
   if (!db) return [];
   const result = await db
     .select({
-      date: sql<string>`DATE(createdAt)`,
+      date: sql<string>`(${conversations.createdAt})::date`,
       count: sql<number>`count(*)`,
     })
     .from(conversations)
-    .where(and(eq(conversations.workspaceId, workspaceId), sql`createdAt >= DATE_SUB(NOW(), INTERVAL 30 DAY)`))
-    .groupBy(sql`DATE(createdAt)`)
-    .orderBy(sql`DATE(createdAt)`);
+    .where(and(eq(conversations.workspaceId, workspaceId), sql`${conversations.createdAt} >= NOW() - INTERVAL '30 days'`))
+    .groupBy(sql`(${conversations.createdAt})::date`)
+    .orderBy(sql`(${conversations.createdAt})::date`);
   return result;
 }
 
@@ -420,16 +521,13 @@ export async function getOrCreatePlaygroundSession(agentId: number, userId: numb
   if (!db) throw new Error("DB not available");
   const existing = await db.select().from(playgroundSessions).where(and(eq(playgroundSessions.agentId, agentId), eq(playgroundSessions.userId, userId))).limit(1);
   if (existing[0]) return existing[0];
-  const result = await db.insert(playgroundSessions).values({ agentId, userId, messages: [] });
-  const insertId = (result as unknown as [{ insertId: number }])[0]?.insertId;
-  const rows = await db.select().from(playgroundSessions).where(eq(playgroundSessions.id, insertId)).limit(1);
-  return rows[0];
+  const [row] = await db.insert(playgroundSessions).values({ agentId, userId, messages: [] }).returning();
+  return row;
 }
 
 export async function updatePlaygroundSession(id: number, data: Partial<typeof playgroundSessions.$inferInsert>) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  await db.update(playgroundSessions).set(data).where(eq(playgroundSessions.id, id));
-  const rows = await db.select().from(playgroundSessions).where(eq(playgroundSessions.id, id)).limit(1);
-  return rows[0];
+  const [row] = await db.update(playgroundSessions).set(data).where(eq(playgroundSessions.id, id)).returning();
+  return row;
 }
