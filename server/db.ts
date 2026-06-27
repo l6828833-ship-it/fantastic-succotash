@@ -99,6 +99,13 @@ export async function getUserByEmail(email: string) {
   return result[0];
 }
 
+export async function getUserById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result[0];
+}
+
 export async function createUser(data: typeof users.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
@@ -738,6 +745,23 @@ export function commissionRateForReferrals(count: number): number {
   return rate;
 }
 
+// Monthly sale value (in cents) used as the commission base when a referred
+// workspace upgrades to a paid plan. Free tiers are 0 (no commission).
+// "enterprise" is custom-priced, so it stays 0 here and can be credited
+// manually by an admin. Keep the plan ids in sync with CONTACT_LIMITS / the
+// Onboarding plan list.
+export const PLAN_PRICE_CENTS: Record<string, number> = {
+  starter: 0,
+  free: 0,
+  growth: 4900,
+  enterprise: 0,
+};
+
+export function planPriceCents(plan?: string | null): number {
+  if (!plan) return 0;
+  return PLAN_PRICE_CENTS[plan] ?? 0;
+}
+
 export async function getAffiliateByUserId(userId: number) {
   const db = await getDb();
   if (!db) return undefined;
@@ -769,6 +793,27 @@ export async function createReferral(data: typeof referrals.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   const [row] = await db.insert(referrals).values(data).returning();
+  return row;
+}
+
+// Find the most recent referral attributed to a given referred email. Used to
+// credit the referring affiliate when that person later upgrades their plan.
+export async function getReferralByEmail(email: string) {
+  const db = await getDb();
+  if (!db || !email) return undefined;
+  const result = await db
+    .select()
+    .from(referrals)
+    .where(ilike(referrals.referredEmail, email))
+    .orderBy(desc(referrals.createdAt))
+    .limit(1);
+  return result[0];
+}
+
+export async function updateReferral(id: number, data: Partial<typeof referrals.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.update(referrals).set(data).where(eq(referrals.id, id)).returning();
   return row;
 }
 
