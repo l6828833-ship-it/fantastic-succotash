@@ -268,3 +268,17 @@ CREATE TABLE IF NOT EXISTS "referrals" (
   "status" text DEFAULT 'pending',
   "createdAt" timestamptz NOT NULL DEFAULT now()
 );
+
+
+CREATE TABLE IF NOT EXISTS "auth_otps" (
+  "id" serial PRIMARY KEY,
+  "email" varchar(320) NOT NULL,
+  "purpose" text NOT NULL,
+  "code" varchar(12) NOT NULL,
+  "name" varchar(255),
+  "passwordHash" text,
+  "attempts" integer NOT NULL DEFAULT 0,
+  "expiresAt" timestamptz NOT NULL,
+  "consumedAt" timestamptz,
+  "createdAt" timestamptz NOT NULL DEFAULT now()
+);

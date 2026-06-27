@@ -10,11 +10,11 @@ import * as db from "../db";
 let _transporter: Transporter | null = null;
 
 export function isEmailConfigured(): boolean {
-  return Boolean(ENV.smtpHost && ENV.emailFrom);
+  return Boolean(ENV.brevoApiKey || (ENV.smtpHost && ENV.emailFrom));
 }
 
 function getTransporter(): Transporter | null {
-  if (!isEmailConfigured()) return null;
+  if (!ENV.smtpHost || !ENV.emailFrom) return null;
   if (_transporter) return _transporter;
   _transporter = nodemailer.createTransport({
     host: ENV.smtpHost,
@@ -32,9 +32,38 @@ export interface EmailMessage {
   text?: string;
 }
 
+// Send a single email via Brevo's transactional HTTP API. Works on hosts that
+// block SMTP ports because it's plain HTTPS.
+async function sendViaBrevo(msg: EmailMessage): Promise<void> {
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key": ENV.brevoApiKey,
+      "content-type": "application/json",
+      accept: "application/json",
+    },
+    body: JSON.stringify({
+      sender: { email: ENV.emailFrom || "no-reply@example.com", name: ENV.emailFromName || undefined },
+      to: [{ email: msg.to }],
+      subject: msg.subject,
+      htmlContent: msg.html,
+      textContent: msg.text,
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Brevo send failed (${res.status}): ${detail.slice(0, 300)}`);
+  }
+}
+
 export async function sendEmail(msg: EmailMessage): Promise<void> {
+  // Prefer the Brevo HTTP API when configured (works behind SMTP-port blocks).
+  if (ENV.brevoApiKey) {
+    await sendViaBrevo(msg);
+    return;
+  }
   const transporter = getTransporter();
-  if (!transporter) throw new Error("Email is not configured (set SMTP_HOST and EMAIL_FROM)");
+  if (!transporter) throw new Error("Email is not configured (set BREVO_API_KEY, or SMTP_HOST and EMAIL_FROM)");
   const from = ENV.emailFromName ? `"${ENV.emailFromName}" <${ENV.emailFrom}>` : ENV.emailFrom;
   await transporter.sendMail({ from, to: msg.to, subject: msg.subject, html: msg.html, text: msg.text });
 }

@@ -327,3 +327,20 @@ export const referrals = pgTable("referrals", {
 });
 
 export type Referral = typeof referrals.$inferSelect;
+
+// ─── Auth OTP codes (email verification + password reset) ─────────────────────
+export const authOtps = pgTable("auth_otps", {
+  id: serial("id").primaryKey(),
+  email: varchar("email", { length: 320 }).notNull(),
+  purpose: text("purpose").$type<"signup" | "reset">().notNull(),
+  code: varchar("code", { length: 12 }).notNull(),
+  // For signup, we stash the pending account details until the code is verified.
+  name: varchar("name", { length: 255 }),
+  passwordHash: text("passwordHash"),
+  attempts: integer("attempts").default(0).notNull(),
+  expiresAt: ts("expiresAt").notNull(),
+  consumedAt: ts("consumedAt"),
+  createdAt: ts("createdAt").defaultNow().notNull(),
+});
+
+export type AuthOtp = typeof authOtps.$inferSelect;

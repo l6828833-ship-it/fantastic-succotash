@@ -37,4 +37,9 @@ export const ENV = {
   // The From address shown to recipients, and an optional display name.
   emailFrom: process.env.EMAIL_FROM ?? "",
   emailFromName: process.env.EMAIL_FROM_NAME ?? "",
+
+  // Brevo (Sendinblue) transactional email via its HTTPS API. Preferred over
+  // SMTP on hosts that block SMTP ports (e.g. Railway); when set it takes
+  // priority over the SMTP transport.
+  brevoApiKey: process.env.BREVO_API_KEY ?? "",
 };

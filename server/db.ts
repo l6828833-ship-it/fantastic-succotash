@@ -5,6 +5,7 @@ import {
   InsertUser,
   affiliates,
   agents,
+  authOtps,
   cannedResponses,
   campaigns,
   contacts,
@@ -763,4 +764,45 @@ export async function createReferral(data: typeof referrals.$inferInsert) {
   if (!db) throw new Error("DB not available");
   const [row] = await db.insert(referrals).values(data).returning();
   return row;
+}
+
+
+// ─── Auth OTP codes ───────────────────────────────────────────────────────────
+export async function setUserPassword(userId: number, passwordHash: string) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+}
+
+// Replace any pending codes for this email+purpose, then store the new one.
+export async function createOtp(data: typeof authOtps.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(authOtps).where(and(eq(authOtps.email, data.email), eq(authOtps.purpose, data.purpose), isNull(authOtps.consumedAt)));
+  const [row] = await db.insert(authOtps).values(data).returning();
+  return row;
+}
+
+export async function getActiveOtp(email: string, purpose: "signup" | "reset") {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select()
+    .from(authOtps)
+    .where(and(eq(authOtps.email, email), eq(authOtps.purpose, purpose), isNull(authOtps.consumedAt)))
+    .orderBy(desc(authOtps.createdAt))
+    .limit(1);
+  return result[0];
+}
+
+export async function incrementOtpAttempts(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(authOtps).set({ attempts: sql`${authOtps.attempts} + 1` }).where(eq(authOtps.id, id));
+}
+
+export async function consumeOtp(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(authOtps).set({ consumedAt: new Date() }).where(eq(authOtps.id, id));
 }
