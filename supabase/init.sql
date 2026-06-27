@@ -129,6 +129,7 @@ CREATE TABLE IF NOT EXISTS "tickets" (
   "id" serial PRIMARY KEY,
   "workspaceId" integer NOT NULL,
   "conversationId" integer,
+  "contactId" integer,
   "assignedUserId" integer,
   "title" varchar(512) NOT NULL,
   "description" text,
@@ -239,3 +240,7 @@ CREATE TABLE IF NOT EXISTS "team_members" (
   "createdAt" timestamptz NOT NULL DEFAULT now(),
   "updatedAt" timestamptz NOT NULL DEFAULT now()
 );
+
+
+-- Migrations for existing databases (safe to run repeatedly).
+ALTER TABLE "tickets" ADD COLUMN IF NOT EXISTS "contactId" integer;

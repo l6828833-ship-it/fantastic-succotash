@@ -266,6 +266,12 @@ export async function getTicketById(id: number) {
   return result[0];
 }
 
+export async function getTicketsByContact(contactId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(tickets).where(eq(tickets.contactId, contactId)).orderBy(desc(tickets.createdAt));
+}
+
 export async function createTicket(data: typeof tickets.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
@@ -546,6 +552,17 @@ export async function getContactById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(contacts).where(eq(contacts.id, id)).limit(1);
+  return result[0];
+}
+
+export async function findContactByEmail(workspaceId: number, email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select()
+    .from(contacts)
+    .where(and(eq(contacts.workspaceId, workspaceId), eq(contacts.email, email)))
+    .limit(1);
   return result[0];
 }
 

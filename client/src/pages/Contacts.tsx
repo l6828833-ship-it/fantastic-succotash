@@ -73,6 +73,10 @@ export default function Contacts() {
   const utils = trpc.useUtils();
   const { data: contacts = [], isLoading } = trpc.contacts.list.useQuery();
   const { data: stats } = trpc.contacts.stats.useQuery();
+  const { data: contactTickets = [] } = trpc.tickets.byContact.useQuery(
+    { contactId: selectedId! },
+    { enabled: !!selectedId }
+  );
 
   const createContact = trpc.contacts.create.useMutation({
     onSuccess: () => {
@@ -300,6 +304,23 @@ export default function Contacts() {
                 <div className="flex items-center gap-2 text-sm text-foreground"><Phone className="w-4 h-4 text-muted-foreground shrink-0" /><span className="truncate">{selected.phone ?? "No phone"}</span></div>
                 <div className="flex items-center gap-2 text-sm text-foreground"><Building2 className="w-4 h-4 text-muted-foreground shrink-0" /><span className="truncate">{selected.company ?? "No company"}</span></div>
                 <div className="flex items-center gap-2 text-sm text-foreground">{getChannelIcon(selected.channel)} <span>{getChannelLabel(selected.channel)}</span></div>
+              </div>
+
+              {/* Tickets */}
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground flex items-center gap-1"><TicketIcon className="w-3 h-3" />Tickets ({contactTickets.length})</Label>
+                {contactTickets.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No tickets for this contact yet.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {contactTickets.map((t) => (
+                      <div key={t.id} className="flex items-center justify-between gap-2 p-2 rounded-md border border-border">
+                        <span className="text-sm text-foreground truncate">{t.title}</span>
+                        <Badge variant="outline" className="text-xs capitalize shrink-0">{t.status ?? "open"}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Tags */}

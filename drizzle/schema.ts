@@ -157,6 +157,7 @@ export const tickets = pgTable("tickets", {
   id: serial("id").primaryKey(),
   workspaceId: integer("workspaceId").notNull(),
   conversationId: integer("conversationId"),
+  contactId: integer("contactId"),
   assignedUserId: integer("assignedUserId"),
   title: varchar("title", { length: 512 }).notNull(),
   description: text("description"),

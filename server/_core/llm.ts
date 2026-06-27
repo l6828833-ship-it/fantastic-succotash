@@ -1,5 +1,8 @@
 import { ENV } from "./env";
 
+// Default model used for all AI features unless a caller overrides it.
+export const DEFAULT_MODEL = "gpt-4o-mini";
+
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
 export type TextContent = {
@@ -360,11 +363,10 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
 
   const payload: Record<string, unknown> = {
     messages: messages.map(normalizeMessage),
+    // Default to gpt-4o-mini so every AI feature works even when a caller
+    // doesn't specify a model.
+    model: model || DEFAULT_MODEL,
   };
-
-  if (model) {
-    payload.model = model;
-  }
 
   if (tools && tools.length > 0) {
     payload.tools = tools;
