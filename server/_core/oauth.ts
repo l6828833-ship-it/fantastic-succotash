@@ -4,6 +4,7 @@ import { parse as parseCookieHeader } from "cookie";
 import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { getSessionCookieOptions } from "./cookies";
+import { attributeReferral } from "./referral";
 import { ENV } from "./env";
 import { sdk } from "./sdk";
 
@@ -196,6 +197,9 @@ export function registerOAuthRoutes(app: Express) {
         (ENV.ownerGithubLogin && ghUser.login === ENV.ownerGithubLogin) ||
         (ENV.ownerOpenId && openId === ENV.ownerOpenId);
 
+      // Detect first-time sign-ups so we only attribute a referral once.
+      const existingUser = await db.getUserByOpenId(openId);
+
       await db.upsertUser({
         openId,
         name: ghUser.name || ghUser.login,
@@ -204,6 +208,22 @@ export function registerOAuthRoutes(app: Express) {
         role: isOwner ? "admin" : undefined,
         lastSignedIn: new Date(),
       });
+
+      // Affiliate attribution: if this is a brand-new user who arrived via a
+      // referral link, record a referral for the owning affiliate (5-day window
+      // enforced inside the helper; guarded against self-referral and re-runs).
+      if (!existingUser) {
+        const newUser = await db.getUserByOpenId(openId);
+        if (newUser) {
+          await attributeReferral({
+            cookieHeader: req.headers.cookie,
+            userId: newUser.id,
+            name: ghUser.name || ghUser.login,
+            email: email ?? null,
+          });
+        }
+      }
+      res.clearCookie("cbp_ref", { path: "/" });
 
       // Issue our own signed session cookie.
       const sessionToken = await sdk.createSessionToken(openId, {

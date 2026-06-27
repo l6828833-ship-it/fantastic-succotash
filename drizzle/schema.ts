@@ -20,6 +20,7 @@ export const users = pgTable("users", {
   name: text("name"),
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
+  passwordHash: text("passwordHash"),
   role: text("role").$type<"user" | "admin">().default("user").notNull(),
   createdAt: ts("createdAt").defaultNow().notNull(),
   updatedAt: ts("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),

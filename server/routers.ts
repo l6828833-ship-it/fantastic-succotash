@@ -771,6 +771,19 @@ const campaignsRouter = router({
   }),
 });
 
+// ─── Search Router ────────────────────────────────────────────────────────────
+const searchRouter = router({
+  global: protectedProcedure
+    .input(z.object({ q: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const q = input.q.trim();
+      if (q.length < 2) return [];
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) return [];
+      return db.searchWorkspace(workspace.id, q);
+    }),
+});
+
 // ─── Analytics Router ─────────────────────────────────────────────────────────
 const analyticsRouter = router({
   summary: protectedProcedure.query(async ({ ctx }) => {
@@ -972,6 +985,7 @@ export const appRouter = router({
   team: teamRouter,
   campaigns: campaignsRouter,
   analytics: analyticsRouter,
+  search: searchRouter,
   notifications: notificationsRouter,
   playground: playgroundRouter,
   upload: uploadRouter,

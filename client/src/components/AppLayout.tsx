@@ -43,19 +43,19 @@ const navItems = [
   { href: "/inbox", icon: Inbox, label: "Inbox" },
   { href: "/tickets", icon: Ticket, label: "Tickets" },
   { href: "/contacts", icon: Users, label: "Contacts" },
-  { href: "/campaigns", icon: Megaphone, label: "Campaigns" },
   { href: "/knowledge", icon: BookOpen, label: "Knowledge Base" },
   { href: "/analytics", icon: BarChart3, label: "Analytics" },
   { href: "/embed", icon: Code2, label: "Embed Code" },
   { href: "/affiliate", icon: Gift, label: "Affiliate" },
 ];
 
-const NOTIF_ICONS: Record<string, string> = {
-  escalation: "🔔",
-  new_ticket: "🎫",
-  campaign_complete: "📣",
-  agent_offline: "🤖",
-  default: "💬",
+const NOTIF_META: Record<string, { icon: React.ElementType; color: string }> = {
+  escalation: { icon: Bell, color: "bg-amber-500/10 text-amber-600" },
+  new_ticket: { icon: Ticket, color: "bg-blue-500/10 text-blue-600" },
+  campaign_complete: { icon: Megaphone, color: "bg-pink-500/10 text-pink-600" },
+  new_conversation: { icon: MessageSquare, color: "bg-emerald-500/10 text-emerald-600" },
+  system: { icon: Bell, color: "bg-slate-500/10 text-slate-600" },
+  default: { icon: MessageSquare, color: "bg-slate-500/10 text-slate-600" },
 };
 
 function NavItem({ href, icon: Icon, label, badge }: { href: string; icon: React.ElementType; label: string; badge?: number }) {
@@ -136,7 +136,7 @@ function NotificationBell() {
             </Button>
           )}
         </div>
-        <ScrollArea className="max-h-80">
+        <div className="max-h-[360px] overflow-y-auto">
           {!notifications || notifications.length === 0 ? (
             <div className="py-8 text-center">
               <Bell className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
@@ -144,33 +144,34 @@ function NotificationBell() {
             </div>
           ) : (
             <div className="divide-y divide-border">
-              {notifications.map((n) => (
-                <div
-                  key={n.id}
-                  className={cn(
-                    "flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-accent/30 transition-colors",
-                    !n.isRead && "bg-primary/3"
-                  )}
-                  onClick={() => !n.isRead && handleMarkRead(n.id)}
-                >
-                  <div className="text-lg shrink-0 mt-0.5">
-                    {NOTIF_ICONS[n.type ?? "default"] ?? NOTIF_ICONS.default}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={cn("text-sm font-medium text-foreground truncate", !n.isRead && "font-semibold")}>{n.title}</p>
-                    <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.body}</p>
-                    <p className="text-xs text-muted-foreground/60 mt-1">
-                      {new Date(n.createdAt).toLocaleString()}
-                    </p>
-                  </div>
-                  {!n.isRead && (
-                    <div className="w-2 h-2 rounded-full bg-primary shrink-0 mt-2" />
-                  )}
-                </div>
-              ))}
+              {notifications.map((n) => {
+                const meta = NOTIF_META[n.type ?? "default"] ?? NOTIF_META.default;
+                const Icon = meta.icon;
+                return (
+                  <button
+                    key={n.id}
+                    type="button"
+                    className={cn(
+                      "w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-accent/50 transition-colors",
+                      !n.isRead && "bg-primary/5"
+                    )}
+                    onClick={() => !n.isRead && handleMarkRead(n.id)}
+                  >
+                    <span className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5", meta.color)}>
+                      <Icon className="w-4 h-4" />
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className={cn("text-sm text-foreground truncate", !n.isRead ? "font-semibold" : "font-medium")}>{n.title}</p>
+                      {n.body && <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.body}</p>}
+                      <p className="text-[11px] text-muted-foreground/60 mt-1">{new Date(n.createdAt).toLocaleString()}</p>
+                    </div>
+                    {!n.isRead && <span className="w-2 h-2 rounded-full bg-primary shrink-0 mt-1.5" />}
+                  </button>
+                );
+              })}
             </div>
           )}
-        </ScrollArea>
+        </div>
       </PopoverContent>
     </Popover>
   );

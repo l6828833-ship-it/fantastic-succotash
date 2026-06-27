@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import {
@@ -90,6 +90,20 @@ export async function getUserByOpenId(openId: string) {
   if (!db) return undefined;
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);
   return result[0];
+}
+
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return result[0];
+}
+
+export async function createUser(data: typeof users.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.insert(users).values(data).returning();
+  return row;
 }
 
 // ─── Workspaces ───────────────────────────────────────────────────────────────
@@ -756,4 +770,48 @@ export async function createReferral(data: typeof referrals.$inferInsert) {
   if (!db) throw new Error("DB not available");
   const [row] = await db.insert(referrals).values(data).returning();
   return row;
+}
+
+
+// ─── Global search ──────────────────────────────────────────────────────────-
+export interface SearchResult {
+  type: "agent" | "contact" | "article" | "qa" | "conversation" | "campaign";
+  id: number;
+  title: string;
+  subtitle: string;
+}
+
+// Workspace-scoped fuzzy search across the main entities, used by the dashboard
+// live search. Each entity is capped so the dropdown stays fast and small.
+export async function searchWorkspace(workspaceId: number, q: string): Promise<SearchResult[]> {
+  const database = await getDb();
+  if (!database) return [];
+  const term = `%${q}%`;
+  const out: SearchResult[] = [];
+
+  const agentRows = await database.select().from(agents)
+    .where(and(eq(agents.workspaceId, workspaceId), ilike(agents.name, term))).limit(5);
+  for (const a of agentRows) out.push({ type: "agent", id: a.id, title: a.name, subtitle: "AI Agent" });
+
+  const contactRows = await database.select().from(contacts)
+    .where(and(eq(contacts.workspaceId, workspaceId), or(ilike(contacts.name, term), ilike(contacts.email, term), ilike(contacts.company, term)))).limit(5);
+  for (const c of contactRows) out.push({ type: "contact", id: c.id, title: c.name ?? c.email ?? "Contact", subtitle: c.email ?? "Contact" });
+
+  const articleRows = await database.select().from(knowledgeArticles)
+    .where(and(eq(knowledgeArticles.workspaceId, workspaceId), or(ilike(knowledgeArticles.title, term), ilike(knowledgeArticles.content, term)))).limit(5);
+  for (const a of articleRows) out.push({ type: "article", id: a.id, title: a.title, subtitle: "Knowledge article" });
+
+  const qaRows = await database.select().from(qaPairs)
+    .where(and(eq(qaPairs.workspaceId, workspaceId), or(ilike(qaPairs.question, term), ilike(qaPairs.answer, term)))).limit(5);
+  for (const qa of qaRows) out.push({ type: "qa", id: qa.id, title: qa.question, subtitle: "Q&A pair" });
+
+  const convRows = await database.select().from(conversations)
+    .where(and(eq(conversations.workspaceId, workspaceId), or(ilike(conversations.visitorName, term), ilike(conversations.visitorEmail, term)))).limit(5);
+  for (const c of convRows) out.push({ type: "conversation", id: c.id, title: c.visitorName ?? c.visitorEmail ?? `Conversation #${c.id}`, subtitle: "Conversation" });
+
+  const campaignRows = await database.select().from(campaigns)
+    .where(and(eq(campaigns.workspaceId, workspaceId), or(ilike(campaigns.name, term), ilike(campaigns.subject, term)))).limit(5);
+  for (const c of campaignRows) out.push({ type: "campaign", id: c.id, title: c.name, subtitle: "Campaign" });
+
+  return out;
 }

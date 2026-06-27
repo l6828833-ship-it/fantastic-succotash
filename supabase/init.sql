@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS "users" (
   "name" text,
   "email" varchar(320),
   "loginMethod" varchar(64),
+  "passwordHash" text,
   "role" text NOT NULL DEFAULT 'user',
   "createdAt" timestamptz NOT NULL DEFAULT now(),
   "updatedAt" timestamptz NOT NULL DEFAULT now(),
@@ -245,6 +246,7 @@ CREATE TABLE IF NOT EXISTS "team_members" (
 
 -- Migrations for existing databases (safe to run repeatedly).
 ALTER TABLE "tickets" ADD COLUMN IF NOT EXISTS "contactId" integer;
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "passwordHash" text;
 ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "ticketMode" text DEFAULT 'off';
 ALTER TABLE "campaigns" ADD COLUMN IF NOT EXISTS "subject" varchar(512);
 

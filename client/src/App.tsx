@@ -2,6 +2,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
 import { Route, Switch } from "wouter";
+import { useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Onboarding from "./pages/Onboarding";
@@ -12,11 +13,11 @@ import Playground from "./pages/Playground";
 import Inbox from "./pages/Inbox";
 import Tickets from "./pages/Tickets";
 import Contacts from "./pages/Contacts";
-import Campaigns from "./pages/Campaigns";
 import KnowledgeBase from "./pages/KnowledgeBase";
 import Analytics from "./pages/Analytics";
 import EmbedCode from "./pages/EmbedCode";
 import Affiliate from "./pages/Affiliate";
+import Login from "./pages/Login";
 import Settings from "./pages/Settings";
 import AppLayout from "./components/AppLayout";
 import { useAuth } from "./_core/hooks/useAuth";
@@ -69,6 +70,7 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
 function Router() {
   return (
     <Switch>
+      <Route path="/login" component={Login} />
       <Route path="/" component={() => (
         <AuthGate>
           <OnboardingGate>
@@ -137,15 +139,6 @@ function Router() {
           </OnboardingGate>
         </AuthGate>
       )} />
-      <Route path="/campaigns" component={() => (
-        <AuthGate>
-          <OnboardingGate>
-            <AppLayout>
-              <Campaigns />
-            </AppLayout>
-          </OnboardingGate>
-        </AuthGate>
-      )} />
       <Route path="/knowledge" component={() => (
         <AuthGate>
           <OnboardingGate>
@@ -198,6 +191,21 @@ function Router() {
 }
 
 function App() {
+  // Capture an affiliate referral code (?ref=CODE) into a cookie so it survives
+  // the GitHub OAuth round-trip and can be attributed when the visitor signs up.
+  useEffect(() => {
+    try {
+      const ref = new URLSearchParams(window.location.search).get("ref");
+      if (ref && /^[A-Za-z0-9]{4,32}$/.test(ref)) {
+        // Persist the referral code + click time for 5 days so it survives the
+        // OAuth round-trip; the server re-checks the 5-day window too.
+        document.cookie = `cbp_ref=${encodeURIComponent(ref)}.${Date.now()}; path=/; max-age=432000; samesite=lax`;
+      }
+    } catch {
+      // ignore (e.g. cookies disabled)
+    }
+  }, []);
+
   return (
     <ErrorBoundary>
       <ThemeProvider defaultTheme="light" switchable>
