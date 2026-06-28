@@ -22,6 +22,11 @@ export const users = pgTable("users", {
   loginMethod: varchar("loginMethod", { length: 64 }),
   passwordHash: text("passwordHash"),
   role: text("role").$type<"user" | "admin">().default("user").notNull(),
+  // When true the account is suspended: login/app access is blocked.
+  suspended: boolean("suspended").default(false),
+  // Last and first-seen IP addresses (to spot one person making many accounts).
+  lastIp: varchar("lastIp", { length: 64 }),
+  signupIp: varchar("signupIp", { length: 64 }),
   createdAt: ts("createdAt").defaultNow().notNull(),
   updatedAt: ts("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
   lastSignedIn: ts("lastSignedIn").defaultNow().notNull(),
@@ -411,3 +416,31 @@ export const payments = pgTable("payments", {
 });
 
 export type Payment = typeof payments.$inferSelect;
+
+
+// ─── Admin audit log ──────────────────────────────────────────────────────────
+// One row per admin action (role change, plan change, suspend, delete, refund,
+// settings update). Provides an accountable, persisted activity trail.
+export const adminLogs = pgTable("admin_logs", {
+  id: serial("id").primaryKey(),
+  actorUserId: integer("actorUserId"),
+  actorEmail: varchar("actorEmail", { length: 320 }),
+  action: varchar("action", { length: 64 }).notNull(),
+  targetType: varchar("targetType", { length: 64 }),
+  targetId: varchar("targetId", { length: 64 }),
+  detail: text("detail"),
+  createdAt: ts("createdAt").defaultNow().notNull(),
+});
+
+export type AdminLog = typeof adminLogs.$inferSelect;
+
+// ─── App settings (platform-wide key/value) ───────────────────────────────────
+// Stores global settings such as custom head/body code (analytics, tools,
+// site-verification snippets) the admin injects across the app.
+export const appSettings = pgTable("app_settings", {
+  key: varchar("key", { length: 128 }).primaryKey(),
+  value: text("value"),
+  updatedAt: ts("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+export type AppSetting = typeof appSettings.$inferSelect;

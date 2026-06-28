@@ -53,6 +53,47 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// Inject admin-configured custom code (analytics, marketing tools, etc.) into
+// the page at runtime. Scripts are recreated so they actually execute.
+function injectCustomCode(html: string, target: HTMLElement, marker: string) {
+  if (!html || typeof document === "undefined") return;
+  if (document.querySelector(`[data-cbp-marker="${marker}"]`)) return; // already injected
+  const tpl = document.createElement("template");
+  tpl.innerHTML = html;
+  let first = true;
+  Array.from(tpl.content.childNodes).forEach((node) => {
+    let el: Node;
+    if (node.nodeName === "SCRIPT") {
+      const src = node as HTMLScriptElement;
+      const s = document.createElement("script");
+      for (const a of Array.from(src.attributes)) s.setAttribute(a.name, a.value);
+      if (!src.src) s.text = src.textContent || "";
+      el = s;
+    } else {
+      el = node.cloneNode(true);
+    }
+    if (el instanceof HTMLElement && first) {
+      el.setAttribute("data-cbp-marker", marker);
+      first = false;
+    }
+    target.appendChild(el);
+  });
+}
+
+function CustomCodeInjector() {
+  const { data } = trpc.appConfig.publicCode.useQuery(undefined, { staleTime: 5 * 60 * 1000, retry: false });
+  useEffect(() => {
+    if (!data) return;
+    try {
+      if (data.headCode) injectCustomCode(data.headCode, document.head, "head");
+      if (data.bodyCode) injectCustomCode(data.bodyCode, document.body, "body");
+    } catch {
+      // Never let a bad snippet break the app.
+    }
+  }, [data]);
+  return null;
+}
+
 function OnboardingGate({ children }: { children: React.ReactNode }) {
   const { data: workspace, isLoading } = trpc.workspace.get.useQuery();
 
@@ -232,6 +273,7 @@ function App() {
       <ThemeProvider defaultTheme="light" switchable>
         <TooltipProvider>
           <Toaster richColors position="top-right" />
+          <CustomCodeInjector />
           <UpgradeProvider>
             <Router />
           </UpgradeProvider>

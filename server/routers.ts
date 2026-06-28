@@ -14,7 +14,7 @@ import {
   cancelStripeSubscription,
   PURCHASABLE_PLANS,
 } from "./_core/billing";
-import { requestBaseUrl } from "./_core/email";
+import { requestBaseUrl, isEmailConfigured } from "./_core/email";
 import { invokeLLM, type Message as LLMMessage } from "./_core/llm";
 import { ENV } from "./_core/env";
 import {
@@ -1238,14 +1238,19 @@ const adminRouter = router({
   workspaces: adminProcedure.query(async () => db.getAllWorkspaces()),
   setUserRole: adminProcedure
     .input(z.object({ id: z.number(), role: z.enum(["user", "admin"]) }))
-    .mutation(async ({ input }) => db.updateUserRole(input.id, input.role)),
+    .mutation(async ({ ctx, input }) => {
+      const row = await db.updateUserRole(input.id, input.role);
+      await db.createAdminLog({ actorUserId: ctx.user.id, actorEmail: ctx.user.email ?? null, action: "set_user_role", targetType: "user", targetId: String(input.id), detail: input.role });
+      return row;
+    }),
   setWorkspacePlan: adminProcedure
     .input(z.object({ id: z.number(), plan: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       await db.updateWorkspace(input.id, { plan: input.plan });
       // Credit the referring affiliate for the sale (no-op for free plans or
       // when the workspace wasn't referred).
       await creditReferralForUpgrade({ workspaceId: input.id, plan: input.plan });
+      await db.createAdminLog({ actorUserId: ctx.user.id, actorEmail: ctx.user.email ?? null, action: "set_workspace_plan", targetType: "workspace", targetId: String(input.id), detail: input.plan });
       return { success: true };
     }),
   // ─── Affiliate management ───────────────────────────────────────────────────
@@ -1294,6 +1299,178 @@ const adminRouter = router({
   affiliateReferrals: adminProcedure
     .input(z.object({ affiliateId: z.number() }))
     .query(async ({ input }) => db.getReferralsByAffiliate(input.affiliateId)),
+
+  // ─── Billing log: every payment/transaction across all workspaces ───────────
+  payments: adminProcedure.query(async () => {
+    const [pays, allWs, allUsers] = await Promise.all([db.getAllPayments(), db.getAllWorkspaces(), db.getAllUsers()]);
+    const wsMap = new Map(allWs.map((w) => [w.id, w]));
+    const userMap = new Map(allUsers.map((u) => [u.id, u]));
+    return pays.map((p) => {
+      const ws = wsMap.get(p.workspaceId);
+      const owner = ws ? userMap.get(ws.userId) : undefined;
+      return {
+        ...p,
+        workspaceName: ws?.companyName ?? null,
+        ownerEmail: owner?.email ?? null,
+      };
+    });
+  }),
+
+  // ─── Per-workspace usage vs plan limits (null limit = unlimited) ────────────
+  usage: adminProcedure.query(async () => {
+    const [allWs, allUsers, counts] = await Promise.all([
+      db.getAllWorkspaces(),
+      db.getAllUsers(),
+      db.getUsageCountsByWorkspace(),
+    ]);
+    const userMap = new Map(allUsers.map((u) => [u.id, u]));
+    const lim = (n: number) => (Number.isFinite(n) ? n : null);
+    return allWs.map((w) => {
+      const owner = userMap.get(w.userId);
+      const plan = w.plan ?? "free";
+      return {
+        workspaceId: w.id,
+        workspaceName: w.companyName ?? null,
+        ownerEmail: owner?.email ?? null,
+        ownerName: owner?.name ?? null,
+        plan,
+        aiConversations: { used: counts.aiConversations.get(w.id) ?? 0, limit: lim(db.conversationLimitForPlan(plan)) },
+        contacts: { used: counts.contacts.get(w.id) ?? 0, limit: lim(db.contactLimitForPlan(plan)) },
+        agents: { used: counts.agents.get(w.id) ?? 0, limit: lim(db.agentLimitForPlan(plan)) },
+        seats: { used: (counts.seats.get(w.id) ?? 0) + 1, limit: lim(db.teamSeatLimitForPlan(plan)) },
+        tickets: { used: counts.tickets.get(w.id) ?? 0, limit: lim(db.ticketLimitForPlan(plan)) },
+      };
+    });
+  }),
+
+  // ─── Activity log: recent platform events (signups + billing) ───────────────
+  activity: adminProcedure.query(async () => {
+    const [recentUsers, pays, allWs] = await Promise.all([
+      db.getAllUsers(100),
+      db.getAllPayments(100),
+      db.getAllWorkspaces(),
+    ]);
+    const wsMap = new Map(allWs.map((w) => [w.id, w]));
+    const userMap = new Map(recentUsers.map((u) => [u.id, u]));
+    type Item = { type: string; title: string; detail: string; at: string | Date };
+    const items: Item[] = [];
+    for (const u of recentUsers) {
+      items.push({ type: "signup", title: "New sign-up", detail: u.email ?? u.name ?? `user #${u.id}`, at: u.createdAt });
+    }
+    for (const p of pays) {
+      const ws = wsMap.get(p.workspaceId);
+      const owner = ws ? userMap.get(ws.userId) : undefined;
+      items.push({
+        type: `payment_${p.status ?? "pending"}`,
+        title: `Payment ${p.status ?? "pending"}`,
+        detail: `${owner?.email ?? ws?.companyName ?? `workspace #${p.workspaceId}`} · ${p.plan} · ${p.provider} · $${((p.amountCents ?? 0) / 100).toFixed(2)}`,
+        at: p.createdAt,
+      });
+    }
+    items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+    return items.slice(0, 120);
+  }),
+
+  // ─── Revenue / MRR summary ──────────────────────────────────────────────────
+  revenue: adminProcedure.query(async () => {
+    const [allWs, pays] = await Promise.all([db.getAllWorkspaces(), db.getAllPayments(1000)]);
+    const paidPlans = ["starter", "pro", "business"];
+    let mrrCents = 0;
+    let activePaid = 0;
+    const planCounts: Record<string, number> = {};
+    for (const w of allWs) {
+      const plan = w.plan ?? "free";
+      planCounts[plan] = (planCounts[plan] ?? 0) + 1;
+      const normalized = plan === "growth" ? "pro" : plan;
+      if (paidPlans.includes(normalized)) {
+        mrrCents += db.planPriceCents(plan);
+        activePaid++;
+      }
+    }
+    const paid = pays.filter((p) => p.status === "paid");
+    const collectedAllTimeCents = paid.reduce((s, p) => s + (p.amountCents ?? 0), 0);
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const collectedThisMonthCents = paid
+      .filter((p) => new Date(p.createdAt as unknown as string) >= monthStart)
+      .reduce((s, p) => s + (p.amountCents ?? 0), 0);
+    return { mrrCents, activePaid, collectedAllTimeCents, collectedThisMonthCents, planCounts };
+  }),
+
+  // ─── System health: which integrations are configured ──────────────────────
+  health: adminProcedure.query(() => ({
+    stripe: isStripeConfigured(),
+    cryptomus: isCryptomusConfigured(),
+    email: isEmailConfigured(),
+  })),
+
+  // ─── Account suspension & deletion (destructive) ────────────────────────────
+  setUserSuspended: adminProcedure
+    .input(z.object({ id: z.number(), suspended: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.id === ctx.user.id) throw new TRPCError({ code: "BAD_REQUEST", message: "You can't suspend your own account." });
+      const row = await db.setUserSuspended(input.id, input.suspended);
+      await db.createAdminLog({ actorUserId: ctx.user.id, actorEmail: ctx.user.email ?? null, action: input.suspended ? "suspend_user" : "unsuspend_user", targetType: "user", targetId: String(input.id), detail: row?.email ?? null });
+      return { success: true };
+    }),
+  deleteUser: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.id === ctx.user.id) throw new TRPCError({ code: "BAD_REQUEST", message: "You can't delete your own account." });
+      await db.deleteUserCascade(input.id);
+      await db.createAdminLog({ actorUserId: ctx.user.id, actorEmail: ctx.user.email ?? null, action: "delete_user", targetType: "user", targetId: String(input.id), detail: null });
+      return { success: true };
+    }),
+  deleteWorkspace: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      await db.deleteWorkspaceCascade(input.id);
+      await db.createAdminLog({ actorUserId: ctx.user.id, actorEmail: ctx.user.email ?? null, action: "delete_workspace", targetType: "workspace", targetId: String(input.id), detail: null });
+      return { success: true };
+    }),
+
+  // ─── Refund a payment ───────────────────────────────────────────────────────
+  refundPayment: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const row = await db.refundPayment(input.id);
+      await db.createAdminLog({ actorUserId: ctx.user.id, actorEmail: ctx.user.email ?? null, action: "refund_payment", targetType: "payment", targetId: String(input.id), detail: row ? `${row.plan} · $${((row.amountCents ?? 0) / 100).toFixed(2)}` : null });
+      return { success: true };
+    }),
+
+  // ─── Persisted audit log of admin actions ───────────────────────────────────
+  logs: adminProcedure.query(async () => db.getAdminLogs()),
+
+  // ─── Growth charts (signups + revenue, last 30 days) ────────────────────────
+  growth: adminProcedure.query(async () => {
+    const [signups, revenue] = await Promise.all([db.getSignupsByDay(), db.getRevenueByDay()]);
+    return {
+      signups: signups.map((s) => ({ date: String(s.date), count: Number(s.count) })),
+      revenue: revenue.map((r) => ({ date: String(r.date), amount: Number(r.cents) / 100 })),
+    };
+  }),
+
+  // ─── Custom code / platform settings ────────────────────────────────────────
+  getSettings: adminProcedure.query(async () => ({
+    customHeadCode: (await db.getAppSetting("customHeadCode")) ?? "",
+    customBodyCode: (await db.getAppSetting("customBodyCode")) ?? "",
+  })),
+  setSettings: adminProcedure
+    .input(z.object({ customHeadCode: z.string().max(20000).optional(), customBodyCode: z.string().max(20000).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.customHeadCode !== undefined) await db.setAppSetting("customHeadCode", input.customHeadCode);
+      if (input.customBodyCode !== undefined) await db.setAppSetting("customBodyCode", input.customBodyCode);
+      await db.createAdminLog({ actorUserId: ctx.user.id, actorEmail: ctx.user.email ?? null, action: "update_settings", targetType: "settings", targetId: "custom_code", detail: null });
+      return { success: true };
+    }),
+});
+
+// ─── App config (public): custom code the admin injects site-wide ─────────────
+const appConfigRouter = router({
+  publicCode: publicProcedure.query(async () => ({
+    headCode: (await db.getAppSetting("customHeadCode")) ?? "",
+    bodyCode: (await db.getAppSetting("customBodyCode")) ?? "",
+  })),
 });
 
 // ─── Billing Router ───────────────────────────────────────────────────────────
@@ -1436,6 +1613,7 @@ export const appRouter = router({
   upload: uploadRouter,
   affiliate: affiliateRouter,
   admin: adminRouter,
+  appConfig: appConfigRouter,
   billing: billingRouter,
 });
 

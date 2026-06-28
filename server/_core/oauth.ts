@@ -225,6 +225,18 @@ export function registerOAuthRoutes(app: Express) {
       }
       res.clearCookie("cbp_ref", { path: "/" });
 
+      // Record the user's IP (to spot duplicate/abusive accounts).
+      try {
+        const ipUser = existingUser ?? (await db.getUserByOpenId(openId));
+        if (ipUser) {
+          const xff = (req.headers["x-forwarded-for"] as string) || "";
+          const ip = (xff.split(",")[0] || req.ip || req.socket?.remoteAddress || "").trim();
+          await db.setUserIp(ipUser.id, ip);
+        }
+      } catch (e) {
+        console.error("[OAuth] failed to record IP", e);
+      }
+
       // Issue our own signed session cookie.
       const sessionToken = await sdk.createSessionToken(openId, {
         name: ghUser.name || ghUser.login,

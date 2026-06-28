@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { readFileSync } from "fs";
@@ -7,6 +7,9 @@ import {
   InsertUser,
   affiliates,
   agents,
+  adminLogs,
+  analyticsEvents,
+  appSettings,
   authOtps,
   cannedResponses,
   campaigns,
@@ -1069,6 +1072,13 @@ export async function updatePayment(id: number, data: Partial<typeof payments.$i
   await db.update(payments).set({ ...data, updatedAt: new Date() }).where(eq(payments.id, id));
 }
 
+// All payments across the platform (billing log), newest first.
+export async function getAllPayments(limit = 500) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(payments).orderBy(desc(payments.createdAt)).limit(limit);
+}
+
 export async function getAffiliateByUserId(userId: number) {
   const db = await getDb();
   if (!db) return undefined;
@@ -1205,6 +1215,163 @@ export async function getPlatformStats() {
     tickets: await one(tickets),
     contacts: await one(contacts),
   };
+}
+
+// Per-workspace usage counts for the admin usage view. Uses GROUP BY so it's a
+// handful of queries regardless of how many workspaces exist.
+export async function getUsageCountsByWorkspace() {
+  const empty = {
+    agents: new Map<number, number>(),
+    contacts: new Map<number, number>(),
+    aiConversations: new Map<number, number>(),
+    tickets: new Map<number, number>(),
+    seats: new Map<number, number>(),
+  };
+  const db = await getDb();
+  if (!db) return empty;
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const toMap = (rows: Array<{ wid: number | null; c: number }>) =>
+    new Map(rows.map((r) => [Number(r.wid), Number(r.c)]));
+  const [ag, ct, convo, tk, tm] = await Promise.all([
+    db.select({ wid: agents.workspaceId, c: sql<number>`count(*)` }).from(agents).groupBy(agents.workspaceId),
+    db.select({ wid: contacts.workspaceId, c: sql<number>`count(*)` }).from(contacts).groupBy(contacts.workspaceId),
+    db.select({ wid: conversations.workspaceId, c: sql<number>`count(*)` }).from(conversations)
+      .where(and(gte(conversations.createdAt, monthStart), eq(conversations.isEscalated, false)))
+      .groupBy(conversations.workspaceId),
+    db.select({ wid: tickets.workspaceId, c: sql<number>`count(*)` }).from(tickets)
+      .where(gte(tickets.createdAt, monthStart)).groupBy(tickets.workspaceId),
+    db.select({ wid: teamMembers.workspaceId, c: sql<number>`count(*)` }).from(teamMembers).groupBy(teamMembers.workspaceId),
+  ]);
+  return {
+    agents: toMap(ag),
+    contacts: toMap(ct),
+    aiConversations: toMap(convo),
+    tickets: toMap(tk),
+    seats: toMap(tm),
+  };
+}
+
+// ─── Admin: suspend / delete / audit log / settings / growth ──────────────────
+export async function setUserSuspended(id: number, suspended: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.update(users).set({ suspended }).where(eq(users.id, id)).returning();
+  return row;
+}
+
+// Record a user's IP: always update lastIp; set signupIp only the first time.
+export async function setUserIp(userId: number, ip: string) {
+  const db = await getDb();
+  if (!db || !ip) return;
+  try {
+    await db.update(users)
+      .set({ lastIp: ip, signupIp: sql`COALESCE(${users.signupIp}, ${ip})` })
+      .where(eq(users.id, userId));
+  } catch (e) {
+    console.error("[Auth] failed to record IP", e);
+  }
+}
+
+// Delete a workspace and all of its data. Destructive and irreversible.
+export async function deleteWorkspaceCascade(workspaceId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const convs = await db.select({ id: conversations.id }).from(conversations).where(eq(conversations.workspaceId, workspaceId));
+  const convIds = convs.map((c) => c.id);
+  const ags = await db.select({ id: agents.id }).from(agents).where(eq(agents.workspaceId, workspaceId));
+  const agentIds = ags.map((a) => a.id);
+  const tks = await db.select({ id: tickets.id }).from(tickets).where(eq(tickets.workspaceId, workspaceId));
+  const ticketIds = tks.map((t) => t.id);
+  if (convIds.length) await db.delete(messages).where(inArray(messages.conversationId, convIds));
+  if (agentIds.length) await db.delete(playgroundSessions).where(inArray(playgroundSessions.agentId, agentIds));
+  if (ticketIds.length) await db.delete(ticketNotes).where(inArray(ticketNotes.ticketId, ticketIds));
+  await db.delete(conversations).where(eq(conversations.workspaceId, workspaceId));
+  await db.delete(tickets).where(eq(tickets.workspaceId, workspaceId));
+  await db.delete(contacts).where(eq(contacts.workspaceId, workspaceId));
+  await db.delete(teamMembers).where(eq(teamMembers.workspaceId, workspaceId));
+  await db.delete(knowledgeArticles).where(eq(knowledgeArticles.workspaceId, workspaceId));
+  await db.delete(qaPairs).where(eq(qaPairs.workspaceId, workspaceId));
+  await db.delete(campaigns).where(eq(campaigns.workspaceId, workspaceId));
+  await db.delete(cannedResponses).where(eq(cannedResponses.workspaceId, workspaceId));
+  await db.delete(notifications).where(eq(notifications.workspaceId, workspaceId));
+  await db.delete(payments).where(eq(payments.workspaceId, workspaceId));
+  await db.delete(analyticsEvents).where(eq(analyticsEvents.workspaceId, workspaceId));
+  await db.delete(agents).where(eq(agents.workspaceId, workspaceId));
+  await db.delete(workspaces).where(eq(workspaces.id, workspaceId));
+}
+
+// Delete a user, their workspace(s) and all related data. Destructive.
+export async function deleteUserCascade(userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const wss = await db.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.userId, userId));
+  for (const w of wss) await deleteWorkspaceCascade(w.id);
+  await db.delete(affiliates).where(eq(affiliates.userId, userId));
+  await db.delete(users).where(eq(users.id, userId));
+}
+
+export async function refundPayment(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.update(payments).set({ status: "refunded", updatedAt: new Date() }).where(eq(payments.id, id)).returning();
+  return row;
+}
+
+export async function createAdminLog(data: typeof adminLogs.$inferInsert) {
+  const db = await getDb();
+  if (!db) return;
+  try {
+    await db.insert(adminLogs).values(data);
+  } catch (e) {
+    console.error("[AdminLog] failed to record", e);
+  }
+}
+
+export async function getAdminLogs(limit = 200) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(adminLogs).orderBy(desc(adminLogs.createdAt)).limit(limit);
+}
+
+export async function getAppSetting(key: string): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const r = await db.select().from(appSettings).where(eq(appSettings.key, key)).limit(1);
+  return r[0]?.value ?? null;
+}
+
+export async function setAppSetting(key: string, value: string) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.insert(appSettings).values({ key, value }).onConflictDoUpdate({
+    target: appSettings.key,
+    set: { value, updatedAt: new Date() },
+  });
+}
+
+// New sign-ups per day over the last 30 days (for the admin growth chart).
+export async function getSignupsByDay() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({ date: sql<string>`(${users.createdAt})::date`, count: sql<number>`count(*)` })
+    .from(users)
+    .where(sql`${users.createdAt} >= NOW() - INTERVAL '30 days'`)
+    .groupBy(sql`(${users.createdAt})::date`)
+    .orderBy(sql`(${users.createdAt})::date`);
+}
+
+// Paid revenue (cents) per day over the last 30 days (for the growth chart).
+export async function getRevenueByDay() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({ date: sql<string>`(${payments.createdAt})::date`, cents: sql<number>`coalesce(sum(${payments.amountCents}),0)` })
+    .from(payments)
+    .where(and(eq(payments.status, "paid"), sql`${payments.createdAt} >= NOW() - INTERVAL '30 days'`))
+    .groupBy(sql`(${payments.createdAt})::date`)
+    .orderBy(sql`(${payments.createdAt})::date`);
 }
 
 // ─── Affiliate payouts / withdrawals ──────────────────────────────────────────

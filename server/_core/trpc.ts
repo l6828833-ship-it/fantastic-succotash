@@ -17,6 +17,11 @@ const requireUser = t.middleware(async opts => {
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }
 
+  // Suspended accounts are blocked from all authenticated actions.
+  if ((ctx.user as { suspended?: boolean }).suspended) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "Your account has been suspended. Please contact support." });
+  }
+
   return next({
     ctx: {
       ...ctx,
