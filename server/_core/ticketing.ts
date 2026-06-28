@@ -1,5 +1,5 @@
 import * as db from "../db";
-import { brandedEmail, isEmailConfigured, sendEmail } from "./email";
+import { brandedEmail, getWorkspaceEmailBranding, isEmailConfigured, sendEmail } from "./email";
 
 export interface CreateCustomerTicketInput {
   workspaceId: number;
@@ -90,12 +90,15 @@ export async function createCustomerTicket(input: CreateCustomerTicketInput) {
   // Branded confirmation email to the customer.
   if (input.sendConfirmation && email && isEmailConfigured()) {
     try {
+      const { brand, replyTo } = await getWorkspaceEmailBranding(input.workspaceId);
       await sendEmail({
         to: email,
+        replyTo,
         subject: `We received your request: ${subject}`,
         html: brandedEmail({
           title: "We've got your request",
           bodyHtml: `<p>Hi ${name || "there"},</p><p>Thanks for reaching out. We've created a support ticket for you and our team will get back to you soon.</p><p style="color:#6b7280;"><strong>Subject:</strong> ${subject}</p>`,
+          brand,
         }),
         text: `Hi ${name || "there"},\n\nThanks for reaching out. We've created a support ticket ("${subject}") and our team will get back to you soon.`,
       });
