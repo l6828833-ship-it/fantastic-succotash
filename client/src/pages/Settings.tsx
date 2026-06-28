@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useUpgrade } from "@/components/UpgradeDialog";
 
 // Mirrors the server's readableBrandColor: light/invalid colors fall back to the
 // default indigo so white text stays visible on the header/buttons.
@@ -105,6 +106,7 @@ const COMPANY_SIZE_OPTIONS = [
 
 export default function Settings() {
   const { user } = useAuth();
+  const { show: showUpgrade } = useUpgrade();
   const [activeTab, setActiveTab] = useState("workspace");
   const [saved, setSaved] = useState(false);
 
@@ -139,7 +141,10 @@ export default function Settings() {
   const [tmRole, setTmRole] = useState<"admin" | "agent">("agent");
   const addMember = trpc.team.create.useMutation({
     onSuccess: () => { utils.team.list.invalidate(); utils.team.seats.invalidate(); setTmName(""); setTmEmail(""); setTmRole("agent"); toast.success("Team member invited"); },
-    onError: (e) => toast.error(e.message || "Failed to add team member"),
+    onError: (e) => {
+      if (e.data?.code === "FORBIDDEN") showUpgrade(e.message);
+      else toast.error(e.message || "Failed to add team member");
+    },
   });
   const removeMember = trpc.team.delete.useMutation({
     onSuccess: () => { utils.team.list.invalidate(); utils.team.seats.invalidate(); },
@@ -240,6 +245,20 @@ export default function Settings() {
     }
     if (billing) {
       params.delete("billing");
+      const qs = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
+    }
+  }, []);
+
+  // Deep-link from the upgrade popup: /settings?upgrade=<plan> opens the billing
+  // tab with the chosen plan's payment dialog already open.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const up = params.get("upgrade");
+    if (up && ["starter", "pro", "business"].includes(up)) {
+      setActiveTab("billing");
+      setPayPlan(up);
+      params.delete("upgrade");
       const qs = params.toString();
       window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
     }

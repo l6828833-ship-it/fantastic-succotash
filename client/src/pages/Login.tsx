@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Bot, Loader2, MailCheck, ArrowLeft, KeyRound, ArrowRight, Sun, Moon,
   MessageSquare, Users, BarChart3, Check, Sparkles, ShieldCheck,
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useAuth } from "@/_core/hooks/useAuth";
 import { toast } from "sonner";
 
 type Mode = "login" | "signup" | "reset";
@@ -27,6 +28,14 @@ const HIGHLIGHTS = [
 export default function Login() {
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
+
+  // Already signed in? Don't show the login page — go straight to the dashboard.
+  const { user, loading: authLoading } = useAuth();
+  useEffect(() => {
+    if (!authLoading && user) {
+      window.location.href = "/dashboard";
+    }
+  }, [authLoading, user]);
 
   const [mode, setMode] = useState<Mode>("login");
   const [step, setStep] = useState<Step>("form");
@@ -177,6 +186,16 @@ export default function Login() {
     if (mode === "signup") return "Create your account to get started";
     return "Reset your password";
   };
+
+  // While we know the user is authenticated, render a spinner during redirect
+  // instead of briefly flashing the login form.
+  if (user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 lg:grid-rows-1 bg-background text-foreground">

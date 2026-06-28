@@ -2,6 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { CHANNELS, getChannelIcon, getChannelLabel } from "@/lib/channels";
 import { useMemo, useState } from "react";
+import { useUpgrade } from "@/components/UpgradeDialog";
 import {
   Users, Search, Plus, X, Trash2, Mail, Phone, Building2, Tag,
   UserCheck, Activity, Ticket as TicketIcon, Loader2, Save, Download,
@@ -52,6 +53,7 @@ function StatCard({ label, value, sub, icon: Icon }: { label: string; value: str
 }
 
 export default function Contacts() {
+  const { show: showUpgrade } = useUpgrade();
   const [search, setSearch] = useState("");
   const [channelFilter, setChannelFilter] = useState("all");
   const [tagFilter, setTagFilter] = useState("all");
@@ -87,7 +89,10 @@ export default function Contacts() {
       setNName(""); setNEmail(""); setNPhone(""); setNCompany(""); setNChannel("web");
       toast.success("Contact added");
     },
-    onError: (e) => toast.error(e.message || "Failed to add contact"),
+    onError: (e) => {
+      if (e.data?.code === "FORBIDDEN") { setShowCreate(false); showUpgrade(e.message); }
+      else toast.error(e.message || "Failed to add contact");
+    },
   });
   const updateContact = trpc.contacts.update.useMutation({
     onSuccess: () => { utils.contacts.list.invalidate(); toast.success("Contact updated"); },
@@ -165,7 +170,7 @@ export default function Contacts() {
   // their segmented audience into their own email tool.
   const exportCsv = () => {
     if (!canExport) {
-      toast.error("CSV export is available on the Pro plan and above. Upgrade to export your contacts.");
+      showUpgrade("CSV export and contact segments are available on the Pro plan and above.");
       return;
     }
     if (filtered.length === 0) { toast.error("No contacts to export"); return; }
@@ -207,7 +212,7 @@ export default function Contacts() {
             <Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={exportCsv} disabled={!canExport || filtered.length === 0} title={!canExport ? "CSV export is available on Pro and above" : undefined}>
               <Download className="w-3.5 h-3.5" />Export CSV
             </Button>
-            <Button size="sm" className="gap-1.5 h-8" onClick={() => setShowCreate(true)} disabled={atLimit} title={atLimit ? "You've reached your plan's contact limit" : undefined}>
+            <Button size="sm" className="gap-1.5 h-8" onClick={() => { if (atLimit) { showUpgrade(`You've reached your plan's limit of ${limit} contacts. Upgrade to add more.`); } else { setShowCreate(true); } }}>
               <Plus className="w-3.5 h-3.5" />Add Contact
             </Button>
           </div>
