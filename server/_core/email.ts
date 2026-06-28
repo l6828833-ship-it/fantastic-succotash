@@ -43,7 +43,7 @@ export interface EmailBranding {
 
 // Only allow safe hex colors in the email HTML (avoids CSS/style injection via
 // the brand-color field). Returns null for anything else.
-function safeColor(c?: string | null): string | null {
+export function safeColor(c?: string | null): string | null {
   return c && /^#[0-9a-fA-F]{3,8}$/.test(c.trim()) ? c.trim() : null;
 }
 
