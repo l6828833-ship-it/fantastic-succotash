@@ -184,6 +184,12 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   const [currentPath] = useLocation();
   const { data: notifications } = trpc.notifications.list.useQuery();
   const unreadCount = notifications?.filter((n) => !n.isRead).length ?? 0;
+  const utils = trpc.useUtils();
+  const { data: workspace } = trpc.workspace.get.useQuery();
+  const supportOnline = workspace?.supportOnline !== false;
+  const setAvailability = trpc.workspace.update.useMutation({
+    onSuccess: () => utils.workspace.get.invalidate(),
+  });
 
   return (
     <div className="flex flex-col h-full bg-sidebar text-sidebar-foreground">
@@ -255,19 +261,41 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-sidebar-accent cursor-pointer transition-all">
-              <Avatar className="w-8 h-8">
-                <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs font-semibold">
-                  {user?.name?.charAt(0)?.toUpperCase() ?? "U"}
-                </AvatarFallback>
-              </Avatar>
+              <div className="relative shrink-0">
+                <Avatar className="w-8 h-8">
+                  <AvatarFallback className="bg-sidebar-primary text-sidebar-primary-foreground text-xs font-semibold">
+                    {user?.name?.charAt(0)?.toUpperCase() ?? "U"}
+                  </AvatarFallback>
+                </Avatar>
+                <span
+                  title={supportOnline ? "Online — conversations can reach you" : "Offline — visitors are offered a ticket"}
+                  className={cn(
+                    "absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-sidebar-border",
+                    supportOnline ? "bg-green-500" : "bg-gray-400",
+                  )}
+                />
+              </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-sidebar-foreground truncate">{user?.name ?? "User"}</p>
-                <p className="text-xs text-sidebar-foreground/40 truncate">{user?.email ?? ""}</p>
+                <p className="text-xs text-sidebar-foreground/40 truncate">{supportOnline ? "Online" : "Offline"}</p>
               </div>
               <ChevronDown className="w-4 h-4 text-sidebar-foreground/40 shrink-0" />
             </div>
           </DropdownMenuTrigger>
-          <DropdownMenuContent side="top" align="start" className="w-56">
+          <DropdownMenuContent side="top" align="start" className="w-60">
+            <DropdownMenuItem
+              onClick={() => setAvailability.mutate({ supportOnline: !supportOnline })}
+              disabled={setAvailability.isPending}
+            >
+              <span className={cn("w-2.5 h-2.5 rounded-full mr-2", supportOnline ? "bg-green-500" : "bg-gray-400")} />
+              {supportOnline ? "Go offline" : "Go online"}
+            </DropdownMenuItem>
+            <p className="px-2 py-1 text-[11px] text-muted-foreground leading-snug">
+              {supportOnline
+                ? "Conversations that need a human reach your Inbox."
+                : "The AI handles chats; visitors are offered a ticket instead of a live human."}
+            </p>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={toggleTheme}>
               {theme === "dark" ? <Sun className="w-4 h-4 mr-2" /> : <Moon className="w-4 h-4 mr-2" />}
               {theme === "dark" ? "Light Mode" : "Dark Mode"}
