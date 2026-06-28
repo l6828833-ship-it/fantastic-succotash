@@ -50,6 +50,13 @@ export async function attributeReferral(opts: {
       amount: 0,
       status: "active",
     });
+    return true;
+  } catch (error) {
+    console.error("[Referral] attribution failed", error);
+    return false;
+  }
+}
+
 /**
  * Credit the referring affiliate when a referred workspace upgrades to a paid
  * plan. Looks up the workspace owner's email, finds their referral row, and
