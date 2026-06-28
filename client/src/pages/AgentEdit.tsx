@@ -118,6 +118,7 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
   const [widgetFont, setWidgetFont] = useState("Inter");
   const [launcherIcon, setLauncherIcon] = useState("chat");
   const [ticketMode, setTicketMode] = useState("off");
+  const [ticketDelaySeconds, setTicketDelaySeconds] = useState(0);
   const [isActive, setIsActive] = useState(true);
 
   useEffect(() => {
@@ -147,6 +148,7 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
       setWidgetFont(agent.widgetFont ?? "Inter");
       setLauncherIcon(LAUNCHER_ICONS.some((i) => i.id === agent.launcherIconUrl) ? (agent.launcherIconUrl as string) : "chat");
       setTicketMode(agent.ticketMode ?? "off");
+      setTicketDelaySeconds(agent.ticketDelaySeconds ?? 0);
       setIsActive(agent.isActive ?? true);
     }
   }, [agent]);
@@ -168,6 +170,7 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
       widgetFont, isActive,
       launcherIconUrl: launcherIcon,
       ticketMode: ticketMode as "off" | "always" | "ai_fallback",
+      ticketDelaySeconds,
     });
   };
 
@@ -804,13 +807,32 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
                   <SelectContent>
                     <SelectItem value="off">Off — no ticket option</SelectItem>
                     <SelectItem value="always">Always — show from the start of chat</SelectItem>
-                    <SelectItem value="ai_fallback">When the AI can't help — offer a ticket automatically</SelectItem>
+                    <SelectItem value="ai_fallback">When the AI can't help &amp; no human is available</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
                   Tickets appear in your Tickets inbox. Escalating a conversation to a human also creates a ticket automatically.
                 </p>
               </div>
+
+              {ticketMode === "ai_fallback" && (
+                <div className="space-y-2">
+                  <Label className="text-sm">Wait for a human before offering a ticket</Label>
+                  <Select value={String(ticketDelaySeconds)} onValueChange={(v) => setTicketDelaySeconds(Number(v))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">Offer immediately</SelectItem>
+                      <SelectItem value="60">After 1 minute</SelectItem>
+                      <SelectItem value="300">After 5 minutes</SelectItem>
+                      <SelectItem value="600">After 10 minutes</SelectItem>
+                      <SelectItem value="900">After 15 minutes</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    When the AI can't help, the visitor waits this long for a human to reply. If no one responds in time, the widget offers a support ticket. If a teammate replies first, no ticket is offered.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
