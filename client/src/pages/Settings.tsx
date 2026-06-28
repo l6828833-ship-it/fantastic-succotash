@@ -17,8 +17,19 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-const PLAN_CONFIG = {
-  starter: {
+// Mirrors the server's readableBrandColor: light/invalid colors fall back to the
+// default indigo so white text stays visible on the header/buttons.
+function readableBrandColor(c: string): string {
+  if (!/^#[0-9a-fA-F]{3,8}$/.test((c || "").trim())) return "#6366f1";
+  let h = c.trim().replace("#", "");
+  if (h.length === 3) h = h.split("").map((x) => x + x).join("");
+  if (h.length < 6) return "#6366f1";
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return lum > 0.72 ? "#6366f1" : `#${h}`;
+}
+
+const PLAN_CONFIG = {  starter: {
     name: "Starter",
     price: "$29/mo",
     color: "text-blue-600 bg-blue-500/10 border-blue-200",
@@ -384,6 +395,7 @@ export default function Settings() {
                       <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(emailBrandColor) ? emailBrandColor : "#6366f1"} onChange={(e) => setEmailBrandColor(e.target.value)} className="w-10 h-10 rounded-lg border border-border cursor-pointer" />
                       <Input value={emailBrandColor} onChange={(e) => setEmailBrandColor(e.target.value)} className="font-mono text-sm" placeholder="#6366f1" />
                     </div>
+                    <p className="text-xs text-muted-foreground">Very light colors (like white) are automatically darkened so white text stays readable.</p>
                   </div>
                   <div className="space-y-1.5">
                     <Label>Logo URL</Label>
@@ -417,7 +429,7 @@ export default function Settings() {
                 </div>
                 <div className="rounded-2xl border border-border bg-[#f4f4f7] p-4">
                   <div className="max-w-[480px] mx-auto bg-white border border-[#e5e7eb] rounded-[14px] overflow-hidden">
-                    <div className="px-6 py-4" style={{ background: /^#[0-9a-fA-F]{3,8}$/.test(emailBrandColor) ? emailBrandColor : "#6366f1" }}>
+                    <div className="px-6 py-4" style={{ background: readableBrandColor(emailBrandColor) }}>
                       {emailLogoUrl ? (
                         <img src={emailLogoUrl} alt={emailBrandName || "Logo"} className="max-h-8 max-w-[180px] object-contain" />
                       ) : (

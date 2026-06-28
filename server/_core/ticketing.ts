@@ -1,5 +1,5 @@
 import * as db from "../db";
-import { brandedEmail, getWorkspaceEmailBranding, isEmailConfigured, sendEmail, ticketPortalUrl, ticketReplyAddress } from "./email";
+import { brandedEmail, getWorkspaceEmailBranding, isEmailConfigured, readableBrandColor, sendEmail, ticketPortalUrl, ticketReplyAddress } from "./email";
 
 export interface CreateCustomerTicketInput {
   workspaceId: number;
@@ -97,9 +97,9 @@ export async function createCustomerTicket(input: CreateCustomerTicketInput) {
       const ticketReply = ticket?.id ? ticketReplyAddress(ticket.id) : null;
       const replyTo = ticketReply || wsReplyTo;
       const portalUrl = ticket?.id ? ticketPortalUrl(input.baseUrl, ticket.id) : null;
-      const btnColor = /^#[0-9a-fA-F]{3,8}$/.test(brand.color || "") ? (brand.color as string) : "#6366f1";
+      const btnColor = readableBrandColor(brand.color);
       const portalBtn = portalUrl
-        ? `<p style="margin:18px 0 4px;"><a href="${portalUrl}" style="background:${btnColor};color:#ffffff;padding:11px 18px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">View &amp; reply to your ticket</a></p>`
+        ? `<p style="margin:18px 0 4px;"><a href="${portalUrl}" style="background-color:${btnColor};color:#ffffff;padding:11px 18px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">View &amp; reply to your ticket</a></p>`
         : "";
       const replyLine = ticketReply
         ? `<p style="color:#6b7280;">Or reply directly to this email — your message will be added to this ticket.</p>`

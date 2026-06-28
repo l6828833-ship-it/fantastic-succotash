@@ -47,6 +47,23 @@ function safeColor(c?: string | null): string | null {
   return c && /^#[0-9a-fA-F]{3,8}$/.test(c.trim()) ? c.trim() : null;
 }
 
+// Return a brand color that's dark enough to show WHITE text/icons on top.
+// If the configured color is missing, invalid, or too light (e.g. white), fall
+// back to the default indigo so buttons/headers are never white-on-white.
+export function readableBrandColor(c?: string | null): string {
+  const hex = safeColor(c);
+  if (!hex) return "#6366f1";
+  let h = hex.replace("#", "");
+  if (h.length === 3) h = h.split("").map((x) => x + x).join("");
+  if (h.length < 6) return "#6366f1";
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  if ([r, g, b].some((v) => Number.isNaN(v))) return "#6366f1";
+  const luminance = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return luminance > 0.72 ? "#6366f1" : hex;
+}
+
 // Resolve a workspace's email branding + reply-to, with sensible fallbacks to
 // the platform defaults. Never throws.
 export async function getWorkspaceEmailBranding(
@@ -185,7 +202,7 @@ export function escapeHtml(s: string): string {
 export function brandedEmail(opts: { title: string; bodyHtml: string; brand?: EmailBranding }): string {
   const b = opts.brand ?? {};
   const name = escapeHtml(b.name || ENV.emailFromName || "Chatrico");
-  const color = safeColor(b.color) || "#6366f1";
+  const color = readableBrandColor(b.color);
   const logo = b.logoUrl ? escapeHtml(b.logoUrl) : "";
   const header = logo
     ? `<div style="background:${color};padding:16px 24px;"><img src="${logo}" alt="${name}" style="max-height:34px;max-width:200px;vertical-align:middle;"></div>`
@@ -431,7 +448,7 @@ export function registerEmailRoutes(app: Express) {
         subject: ticket.title,
         status: ticket.status,
         brandName: brand.name || "Support",
-        brandColor: brand.color || "#6366f1",
+        brandColor: readableBrandColor(brand.color),
         messages,
       });
     } catch (error) {
