@@ -763,10 +763,42 @@ export async function getContactStats(workspaceId: number) {
 }
 
 // ─── Team Members ─────────────────────────────────────────────────────────────
+
+// Seat limits per plan. The workspace owner counts as one seat, so the number
+// of additional team_members allowed is (limit - 1). Keep plan ids in sync with
+// CONTACT_LIMITS / the Onboarding plan list.
+export const TEAM_SEAT_LIMITS: Record<string, number> = {
+  starter: 2,
+  free: 2,
+  growth: 10,
+  enterprise: Number.POSITIVE_INFINITY,
+};
+
+export function teamSeatLimitForPlan(plan?: string | null): number {
+  if (!plan) return TEAM_SEAT_LIMITS.starter;
+  return TEAM_SEAT_LIMITS[plan] ?? TEAM_SEAT_LIMITS.starter;
+}
+
 export async function getTeamMembersByWorkspace(workspaceId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(teamMembers).where(eq(teamMembers.workspaceId, workspaceId)).orderBy(desc(teamMembers.createdAt));
+}
+
+export async function findTeamMemberByEmail(workspaceId: number, email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select()
+    .from(teamMembers)
+    .where(and(eq(teamMembers.workspaceId, workspaceId), ilike(teamMembers.email, email)))
+    .limit(1);
+  return result[0];
+}
+
+export async function countTeamMembersByWorkspace(workspaceId: number) {
+  const rows = await getTeamMembersByWorkspace(workspaceId);
+  return rows.length;
 }
 
 export async function createTeamMember(data: typeof teamMembers.$inferInsert) {

@@ -226,8 +226,9 @@ export default function Affiliate() {
               <p className="text-lg font-bold text-foreground">{money(availableCents)}</p>
             </div>
             <div className="rounded-lg border border-border p-3">
-              <p className="text-xs text-muted-foreground">Pending / requested</p>
-              <p className="text-lg font-bold text-foreground">{money(data?.reservedCents)}</p>
+              <p className="text-xs text-muted-foreground">Processing</p>
+              <p className="text-lg font-bold text-foreground">{money(data?.pendingCents)}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">requested, awaiting payout</p>
             </div>
             <div className="rounded-lg border border-border p-3">
               <p className="text-xs text-muted-foreground">Paid out</p>
