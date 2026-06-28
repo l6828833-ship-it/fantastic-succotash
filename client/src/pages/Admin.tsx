@@ -15,7 +15,7 @@ import { toast } from "sonner";
 
 const PLAN_OPTIONS = ["free", "starter", "pro", "business", "enterprise"];
 
-function StatCard({ label, value, icon: Icon }: { label: string; value: number; icon: React.ElementType }) {
+function StatCard({ label, value, icon: Icon }: { label: string; value?: number; icon: React.ElementType }) {
   return (
     <Card className="border-border">
       <CardContent className="p-4 flex items-center gap-3">
@@ -23,7 +23,9 @@ function StatCard({ label, value, icon: Icon }: { label: string; value: number; 
           <Icon className="w-4 h-4" />
         </div>
         <div>
-          <p className="text-xl font-bold text-foreground">{value}</p>
+          {value === undefined
+            ? <div className="h-6 w-12 rounded bg-muted animate-pulse" />
+            : <p className="text-xl font-bold text-foreground">{value.toLocaleString()}</p>}
           <p className="text-xs text-muted-foreground">{label}</p>
         </div>
       </CardContent>
@@ -190,12 +192,12 @@ export default function Admin() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-        <StatCard label="Users" value={stats?.users ?? 0} icon={Users} />
-        <StatCard label="Workspaces" value={stats?.workspaces ?? 0} icon={Building2} />
-        <StatCard label="Agents" value={stats?.agents ?? 0} icon={Bot} />
-        <StatCard label="Conversations" value={stats?.conversations ?? 0} icon={MessageSquare} />
-        <StatCard label="Tickets" value={stats?.tickets ?? 0} icon={Ticket} />
-        <StatCard label="Contacts" value={stats?.contacts ?? 0} icon={Contact} />
+        <StatCard label="Users" value={stats?.users} icon={Users} />
+        <StatCard label="Workspaces" value={stats?.workspaces} icon={Building2} />
+        <StatCard label="Agents" value={stats?.agents} icon={Bot} />
+        <StatCard label="Conversations" value={stats?.conversations} icon={MessageSquare} />
+        <StatCard label="Tickets" value={stats?.tickets} icon={Ticket} />
+        <StatCard label="Contacts" value={stats?.contacts} icon={Contact} />
       </div>
 
       {/* Revenue + system health */}
