@@ -386,3 +386,23 @@ export const referrals = pgTable("referrals", {
 });
 
 export type Referral = typeof referrals.$inferSelect;
+
+
+// ─── Payments ─────────────────────────────────────────────────────────────────
+// Records every checkout attempt (Stripe card or Cryptomus crypto). A row is
+// created when checkout starts (status "pending") and flipped to "paid" by the
+// provider webhook, which is also when the workspace plan is activated.
+export const payments = pgTable("payments", {
+  id: serial("id").primaryKey(),
+  workspaceId: integer("workspaceId").notNull(),
+  provider: varchar("provider", { length: 32 }).notNull(), // "stripe" | "cryptomus"
+  // Provider-side identifier: Stripe Checkout Session id, or our Cryptomus order id.
+  externalId: varchar("externalId", { length: 255 }),
+  plan: varchar("plan", { length: 64 }).notNull(),
+  amountCents: integer("amountCents").default(0),
+  status: varchar("status", { length: 32 }).default("pending"), // pending | paid | failed
+  createdAt: ts("createdAt").defaultNow().notNull(),
+  updatedAt: ts("updatedAt").defaultNow().notNull(),
+});
+
+export type Payment = typeof payments.$inferSelect;

@@ -16,6 +16,7 @@ import {
   messages,
   notifications,
   payoutRequests,
+  payments,
   playgroundSessions,
   qaPairs,
   referrals,
@@ -958,6 +959,27 @@ export const PLAN_PRICE_CENTS: Record<string, number> = {
 export function planPriceCents(plan?: string | null): number {
   if (!plan) return 0;
   return PLAN_PRICE_CENTS[plan] ?? 0;
+}
+
+// ─── Payments ─────────────────────────────────────────────────────────────────
+export async function createPayment(data: typeof payments.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const rows = await db.insert(payments).values(data).returning();
+  return rows[0];
+}
+
+export async function getPaymentByExternalId(externalId: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const rows = await db.select().from(payments).where(eq(payments.externalId, externalId)).limit(1);
+  return rows[0];
+}
+
+export async function updatePayment(id: number, data: Partial<typeof payments.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(payments).set({ ...data, updatedAt: new Date() }).where(eq(payments.id, id));
 }
 
 export async function getAffiliateByUserId(userId: number) {
