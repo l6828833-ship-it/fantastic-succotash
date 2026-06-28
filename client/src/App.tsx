@@ -24,6 +24,7 @@ import AcceptInvite from "./pages/AcceptInvite";
 import { Terms, Privacy, Refund } from "./pages/Legal";
 import TicketPortal from "./pages/TicketPortal";
 import Settings from "./pages/Settings";
+import Support from "./pages/Support";
 import AppLayout from "./components/AppLayout";
 import { UpgradeProvider } from "./components/UpgradeDialog";
 import { useAuth } from "./_core/hooks/useAuth";
@@ -290,6 +291,15 @@ function Router() {
           <OnboardingGate>
             <AppLayout>
               <Settings />
+            </AppLayout>
+          </OnboardingGate>
+        </AuthGate>
+      )} />
+      <Route path="/support" component={() => (
+        <AuthGate>
+          <OnboardingGate>
+            <AppLayout>
+              <Support />
             </AppLayout>
           </OnboardingGate>
         </AuthGate>

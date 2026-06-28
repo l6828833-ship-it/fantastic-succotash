@@ -448,3 +448,20 @@ export const appSettings = pgTable("app_settings", {
 });
 
 export type AppSetting = typeof appSettings.$inferSelect;
+
+// ─── Support messages (user → platform admin) ─────────────────────────────────
+export const supportMessages = pgTable("support_messages", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId"),
+  workspaceId: integer("workspaceId"),
+  email: varchar("email", { length: 320 }),
+  subject: varchar("subject", { length: 512 }).notNull(),
+  message: text("message").notNull(),
+  status: text("status").$type<"open" | "closed">().default("open"),
+  adminReply: text("adminReply"),
+  repliedAt: ts("repliedAt"),
+  createdAt: ts("createdAt").defaultNow().notNull(),
+  updatedAt: ts("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
+});
+
+export type SupportMessage = typeof supportMessages.$inferSelect;

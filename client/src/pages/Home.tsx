@@ -178,6 +178,9 @@ function PlanCard({ p }: { p: (typeof PLANS)[number] }) {
           {p.id === "free" ? "Get started free" : "Get started"}
         </Button>
       </Link>
+      <p className="mt-2 text-center text-[11px] text-muted-foreground">
+        {p.id === "free" ? "No credit card required" : "Cancel anytime · no lock-in"}
+      </p>
       <ul className="mt-5 space-y-2.5">
         {shown.map((f) => (
           <li key={f} className="flex items-start gap-2 text-sm">
@@ -340,6 +343,11 @@ export default function Home() {
             <Badge variant="outline" className="mb-4 text-primary border-primary/30 bg-primary/5">Pricing</Badge>
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">Simple, scalable pricing</h2>
             <p className="mt-3 text-muted-foreground">Start free. Upgrade when you grow. Cancel anytime.</p>
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs font-medium text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-green-500" /> Cancel anytime</span>
+              <span className="inline-flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-green-500" /> No lock-in</span>
+              <span className="inline-flex items-center gap-1.5"><Check className="w-3.5 h-3.5 text-green-500" /> Secure checkout</span>
+            </div>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 items-start">
             {PLANS.map((p) => <PlanCard key={p.id} p={p} />)}
