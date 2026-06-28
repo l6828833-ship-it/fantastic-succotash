@@ -30,6 +30,24 @@ export const users = pgTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+// ─── Auth OTP codes ───────────────────────────────────────────────────────────
+// Short-lived one-time codes for email verification during sign-up (and, later,
+// password reset). The code itself is stored hashed; `payload` carries the
+// pending account data (name + password hash) so verification can create the
+// user without the client re-sending the password.
+export const authOtps = pgTable("auth_otps", {
+  id: serial("id").primaryKey(),
+  email: varchar("email", { length: 320 }).notNull(),
+  codeHash: varchar("codeHash", { length: 128 }).notNull(),
+  purpose: text("purpose").$type<"signup" | "reset">().default("signup").notNull(),
+  payload: jsonb("payload").$type<{ name?: string; passwordHash?: string }>(),
+  attempts: integer("attempts").default(0).notNull(),
+  expiresAt: ts("expiresAt").notNull(),
+  createdAt: ts("createdAt").defaultNow().notNull(),
+});
+
+export type AuthOtp = typeof authOtps.$inferSelect;
+
 // ─── Workspaces ───────────────────────────────────────────────────────────────
 export const workspaces = pgTable("workspaces", {
   id: serial("id").primaryKey(),

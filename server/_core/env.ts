@@ -24,8 +24,11 @@ export const ENV = {
   appBaseUrl: process.env.APP_BASE_URL ?? "",
 
   // ─── Email / SMTP (campaign + transactional sending) ───────────────────────
-  // Works with any SMTP provider (Amazon SES, SendGrid, Mailgun, Postmark,
-  // Gmail, etc.). Email features are disabled gracefully when these are unset.
+  // Brevo HTTP API is preferred (works on hosts that block SMTP ports, e.g.
+  // Railway). Set BREVO_API_KEY + EMAIL_FROM and email "just works". SMTP is
+  // used as a fallback when no Brevo key is set. Email degrades gracefully when
+  // neither is configured (isEmailConfigured() === false).
+  brevoApiKey: process.env.BREVO_API_KEY ?? "",
   smtpHost: process.env.SMTP_HOST ?? "",
   smtpPort: Number(process.env.SMTP_PORT ?? "587"),
   // Force a TLS-on-connect (smtps) socket. Defaults to true for port 465.

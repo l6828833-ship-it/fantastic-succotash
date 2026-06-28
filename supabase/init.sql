@@ -282,6 +282,18 @@ ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "brandLogoUrl" text;
 ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "customCss" text;
 ALTER TABLE "campaigns" ADD COLUMN IF NOT EXISTS "subject" varchar(512);
 
+-- One-time codes for email verification (sign-up OTP) and password reset.
+CREATE TABLE IF NOT EXISTS "auth_otps" (
+  "id" serial PRIMARY KEY,
+  "email" varchar(320) NOT NULL,
+  "codeHash" varchar(128) NOT NULL,
+  "purpose" text NOT NULL DEFAULT 'signup',
+  "payload" jsonb,
+  "attempts" integer NOT NULL DEFAULT 0,
+  "expiresAt" timestamptz NOT NULL,
+  "createdAt" timestamptz NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS "affiliates" (
   "id" serial PRIMARY KEY,
   "userId" integer NOT NULL UNIQUE,
