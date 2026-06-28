@@ -61,6 +61,16 @@ export default function Inbox() {
     onError: () => toast.error("Failed to create ticket"),
   });
 
+  // Human availability: drives whether the widget connects visitors to a human
+  // or offers a support ticket instead.
+  const { data: workspace } = trpc.workspace.get.useQuery();
+  const utils = trpc.useUtils();
+  const supportOnline = workspace?.supportOnline !== false;
+  const setOnline = trpc.workspace.update.useMutation({
+    onSuccess: () => { utils.workspace.get.invalidate(); },
+    onError: () => toast.error("Failed to update availability"),
+  });
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -130,7 +140,21 @@ export default function Inbox() {
       {/* Conversation list */}
       <div className="w-80 shrink-0 border-r border-border flex flex-col bg-background">
         <div className="p-4 border-b border-border">
-          <h2 className="font-semibold text-foreground mb-3">Inbox</h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold text-foreground">Inbox</h2>
+            <button
+              onClick={() => setOnline.mutate({ supportOnline: !supportOnline })}
+              disabled={setOnline.isPending}
+              title="When offline, the chat widget offers visitors a support ticket instead of connecting them to a human."
+              className={cn(
+                "inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border transition-colors",
+                supportOnline ? "bg-green-500/10 text-green-600 border-green-200" : "bg-muted text-muted-foreground border-border",
+              )}
+            >
+              <span className={cn("w-2 h-2 rounded-full", supportOnline ? "bg-green-500" : "bg-gray-400")} />
+              {supportOnline ? "Team online" : "Team offline"}
+            </button>
+          </div>
           <Tabs value={statusFilter} onValueChange={setStatusFilter}>
             <TabsList className="grid grid-cols-3 w-full h-8">
               <TabsTrigger value="open" className="text-xs">Open</TabsTrigger>

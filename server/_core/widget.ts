@@ -270,11 +270,17 @@ const WIDGET_JS = `(function(){
     }
   }
 
+  // Reveal the ticket button without posting a message (caller handles messaging).
+  function revealTicketButton(){
+    if (ticketOffered) return;
+    ticketOffered = true;
+    ticketBtn.style.display = "flex";
+  }
+
   // Reveal the ticket option now (used immediately or after the wait timer).
   function offerTicketNow(){
     if (ticketOffered || humanReplied) return;
-    ticketOffered = true;
-    ticketBtn.style.display = "flex";
+    revealTicketButton();
     addMsg("bot", "No one's available to continue right now. You can open a support ticket and we'll get back to you by email.");
   }
 
@@ -450,16 +456,24 @@ const WIDGET_JS = `(function(){
       if (data && data.userMessageId) bumpSeen(data.userMessageId);
       if (data && data.messageId) bumpSeen(data.messageId);
       if (data && data.mode === "human"){
-        // A human will answer from the Inbox; their reply arrives via polling.
-        if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", "You're connected to our team — someone will reply right here shortly."); }
-        // If no human replies within the wait window, offer a ticket.
-        if (ticketMode === "ai_fallback"){ scheduleTicketOffer(); }
+        if (data.humanAvailable === false){
+          // No human online right now — offer a ticket instead of a false promise.
+          if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", data.offlineMessage || "Our team is offline right now. Leave a ticket and we'll reply by email."); }
+          if (ticketMode !== "off"){ revealTicketButton(); }
+        } else {
+          // A human will answer from the Inbox; their reply arrives via polling.
+          if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", "You're connected to our team — someone will reply right here shortly."); }
+          // If no human replies within the wait window, offer a ticket.
+          if (ticketMode === "ai_fallback"){ scheduleTicketOffer(); }
+        }
       } else if (data && data.reply){
         addMsg("bot", data.reply);
-        // In ai_fallback mode, offer a ticket when the AI couldn't answer — after
-        // the configured wait (so a human still has a chance to jump in first).
+        // In ai_fallback mode, offer a ticket when the AI couldn't answer. If no
+        // human is online, offer it right away; otherwise wait the configured
+        // window so a teammate can still jump in first.
         if (ticketMode === "ai_fallback" && data.fallback){
-          scheduleTicketOffer();
+          if (data.humanAvailable === false){ offerTicketNow(); }
+          else { scheduleTicketOffer(); }
         }
       } else {
         addMsg("bot", "Sorry, something went wrong. Please try again.");
@@ -751,6 +765,12 @@ export function registerWidgetRoutes(app: Express) {
       const userMsg = await db.createMessage({ conversationId, role: "user", content: message });
       const userMessageId = userMsg?.id ?? null;
 
+      // Is a human available to take over? Driven by the workspace's manual
+      // online/offline toggle. When offline, the widget offers a ticket instead
+      // of promising a live reply that won't come.
+      const ws = await db.getWorkspaceById(agent.workspaceId);
+      const humanAvailable = ws?.supportOnline !== false;
+
       // When the conversation has been handed to a human (escalated, switched to
       // "human" handoff in the Inbox, or the agent is human-only), the AI must
       // NOT reply. A teammate answers from the Inbox and the widget receives it
@@ -760,7 +780,13 @@ export function registerWidgetRoutes(app: Express) {
         conv?.isEscalated === true ||
         agent.handoffMode === "human_only";
       if (humanMode) {
-        res.json({ conversationId, mode: "human", userMessageId });
+        res.json({
+          conversationId,
+          mode: "human",
+          userMessageId,
+          humanAvailable,
+          offlineMessage: agent.offlineMessage ?? null,
+        });
         return;
       }
 
@@ -799,7 +825,7 @@ export function registerWidgetRoutes(app: Express) {
 
       // `fallback` lets the widget offer a ticket in ai_fallback mode when the AI
       // couldn't answer from its knowledge.
-      res.json({ reply, conversationId, mode: "ai", userMessageId, messageId: agentMsg?.id ?? null, fallback: !llmContent });
+      res.json({ reply, conversationId, mode: "ai", userMessageId, messageId: agentMsg?.id ?? null, fallback: !llmContent, humanAvailable });
     } catch (error) {
       console.error("[Widget] chat failed", error);
       // Degrade gracefully so the visitor still sees a reply.

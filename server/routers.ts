@@ -39,6 +39,7 @@ const workspaceRouter = router({
       companySize: z.string().optional(),
       features: z.array(z.string()).optional(),
       plan: z.string().optional(),
+      supportOnline: z.boolean().optional(),
       onboardingCompleted: z.boolean().optional(),
       onboardingStep: z.number().optional(),
       // Email branding
