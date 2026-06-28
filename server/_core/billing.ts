@@ -16,12 +16,17 @@ const PLAN_LABELS: Record<string, string> = {
   business: "Chatrico Business",
 };
 
+// A valid server-side Stripe key is a secret ("sk_") or restricted ("rk_") key.
+// Anything else (publishable "pk_", or an unrelated value) cannot create
+// checkout sessions.
+function looksLikeStripeSecretKey(key: string): boolean {
+  return key.startsWith("sk_") || key.startsWith("rk_");
+}
+
 export function isStripeConfigured(): boolean {
-  const key = ENV.stripeSecretKey;
-  // A valid server-side key is a secret ("sk_") or restricted ("rk_") key.
-  // A publishable key ("pk_") cannot create checkout sessions, so treat it as
-  // not configured — this keeps the card option hidden until it's fixed.
-  return !!key && !key.startsWith("pk_");
+  // Only treat Stripe as configured when a real secret/restricted key is set,
+  // so the card option stays hidden until it's fixed correctly.
+  return looksLikeStripeSecretKey(ENV.stripeSecretKey);
 }
 
 export function isCryptomusConfigured(): boolean {
@@ -52,12 +57,13 @@ export async function createStripeCheckout(opts: {
   const amount = db.planPriceCents(opts.plan);
   if (!amount) throw new Error("Plan is not purchasable");
 
-  // Guard against the most common misconfiguration: a publishable key (pk_)
-  // placed in STRIPE_SECRET_KEY. Stripe rejects it server-side with a cryptic
-  // error, so fail early with an actionable message instead.
-  if (!ENV.stripeSecretKey || ENV.stripeSecretKey.startsWith("pk_")) {
+  // Guard against the most common misconfiguration: a wrong value in
+  // STRIPE_SECRET_KEY (e.g. a publishable "pk_" key, or some other token).
+  // Stripe rejects these with a cryptic error, so fail early with an
+  // actionable message instead.
+  if (!looksLikeStripeSecretKey(ENV.stripeSecretKey)) {
     throw new Error(
-      "Stripe is misconfigured: STRIPE_SECRET_KEY must be your secret key (starts with 'sk_'), not the publishable key (starts with 'pk_'). Get it at https://dashboard.stripe.com/apikeys.",
+      "Stripe is misconfigured: STRIPE_SECRET_KEY must be your Stripe secret key from https://dashboard.stripe.com/apikeys — it starts with 'sk_live_' or 'sk_test_' (a restricted 'rk_' key also works). The value provided is not a valid Stripe secret key.",
     );
   }
 
