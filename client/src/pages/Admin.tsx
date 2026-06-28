@@ -2,7 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
-import { Shield, Users, Building2, Bot, MessageSquare, Ticket, Contact, ShieldCheck, ShieldOff, Gift, Wallet, Check, X, DollarSign, Eye, CreditCard, Activity, Gauge, Ban, Trash2, Download, Code, TrendingUp, FileText } from "lucide-react";
+import { Shield, Users, Building2, Bot, MessageSquare, Ticket, Contact, ShieldCheck, ShieldOff, Gift, Wallet, Check, X, DollarSign, Eye, CreditCard, Activity, Gauge, Ban, Trash2, Download, Code, TrendingUp, FileText, LifeBuoy, Send } from "lucide-react";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer } from "recharts";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -88,6 +88,10 @@ export default function Admin() {
     onSuccess: () => { utils.admin.workspaces.invalidate(); utils.admin.usage.invalidate(); utils.admin.stats.invalidate(); toast.success("Workspace deleted"); },
     onError: (e) => toast.error(e.message || "Failed to delete workspace"),
   });
+  const cancelSub = trpc.admin.cancelUserSubscription.useMutation({
+    onSuccess: () => { utils.admin.workspaces.invalidate(); toast.success("Subscription will not renew (cancelled at period end)"); },
+    onError: (e) => toast.error(e.message || "Failed to cancel subscription"),
+  });
   const refundM = trpc.admin.refundPayment.useMutation({
     onSuccess: () => { utils.admin.payments.invalidate(); toast.success("Marked as refunded"); },
     onError: (e) => toast.error(e.message || "Failed to refund"),
@@ -100,6 +104,12 @@ export default function Admin() {
     onError: (e) => toast.error(e.message || "Failed to save"),
   });
   const [headCode, setHeadCode] = useState("");
+  const { data: support = [] } = trpc.admin.supportMessages.useQuery(undefined, { enabled: isAdmin });
+  const replySupport = trpc.admin.replySupport.useMutation({
+    onSuccess: () => { utils.admin.supportMessages.invalidate(); toast.success("Reply sent"); },
+    onError: (e) => toast.error(e.message || "Failed to send reply"),
+  });
+  const [supportDrafts, setSupportDrafts] = useState<Record<number, string>>({});
   const [bodyCode, setBodyCode] = useState("");
   useEffect(() => {
     if (settings) { setHeadCode(settings.customHeadCode ?? ""); setBodyCode(settings.customBodyCode ?? ""); }
@@ -117,7 +127,7 @@ export default function Admin() {
 
 
   type U = { id: number; name?: string | null; email?: string | null; role?: string | null; lastSignedIn?: string | Date | null; suspended?: boolean | null; lastIp?: string | null; signupIp?: string | null };
-  type W = { id: number; companyName?: string | null; plan?: string | null; userId: number };
+  type W = { id: number; companyName?: string | null; plan?: string | null; userId: number; stripeSubscriptionId?: string | null; subscriptionCancelAtPeriodEnd?: boolean | null };
   const userList = users as U[];
   const wsList = workspaces as W[];
   const ownerEmail = (uid: number) => userList.find((u) => u.id === uid)?.email ?? `user #${uid}`;
@@ -178,6 +188,9 @@ export default function Admin() {
   );
   type LogRow = { id: number; actorEmail?: string | null; action: string; targetType?: string | null; targetId?: string | null; detail?: string | null; createdAt: string | Date };
   const logList = logs as LogRow[];
+  type SupportRow = { id: number; subject: string; message: string; status?: string | null; adminReply?: string | null; userEmail?: string | null; userName?: string | null; createdAt: string | Date };
+  const supportList = support as SupportRow[];
+  const openSupport = supportList.filter((s) => s.status !== "closed").length;
 
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
@@ -257,6 +270,7 @@ export default function Admin() {
           <TabsTrigger value="logs" className="gap-1.5 text-xs"><FileText className="w-3.5 h-3.5" />Audit log</TabsTrigger>
           <TabsTrigger value="growth" className="gap-1.5 text-xs"><TrendingUp className="w-3.5 h-3.5" />Growth</TabsTrigger>
           <TabsTrigger value="settings" className="gap-1.5 text-xs"><Code className="w-3.5 h-3.5" />Custom code</TabsTrigger>
+          <TabsTrigger value="support" className="gap-1.5 text-xs"><LifeBuoy className="w-3.5 h-3.5" />Support{openSupport > 0 ? ` (${openSupport})` : ""}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="users" className="mt-4">
@@ -360,9 +374,17 @@ export default function Admin() {
                         </Select>
                       </td>
                       <td className="px-3 py-2.5 text-right">
-                        <Button size="sm" variant="outline" className="h-7 gap-1 text-xs text-destructive hover:text-destructive" disabled={deleteWsM.isPending} onClick={() => { if (window.confirm(`Delete workspace "${w.companyName ?? w.id}" and ALL its data? This cannot be undone.`)) deleteWsM.mutate({ id: w.id }); }}>
-                          <Trash2 className="w-3 h-3" />Delete
-                        </Button>
+                        <div className="flex items-center gap-1 justify-end flex-wrap">
+                          {w.stripeSubscriptionId && !w.subscriptionCancelAtPeriodEnd && (
+                            <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" disabled={cancelSub.isPending} onClick={() => { if (window.confirm(`Cancel this workspace's subscription? It will NOT renew next month (this is not a refund).`)) cancelSub.mutate({ workspaceId: w.id }); }}>
+                              Cancel sub
+                            </Button>
+                          )}
+                          {w.subscriptionCancelAtPeriodEnd && <span className="text-[11px] text-amber-600">Cancels at period end</span>}
+                          <Button size="sm" variant="outline" className="h-7 gap-1 text-xs text-destructive hover:text-destructive" disabled={deleteWsM.isPending} onClick={() => { if (window.confirm(`Delete workspace "${w.companyName ?? w.id}" and ALL its data? This cannot be undone.`)) deleteWsM.mutate({ id: w.id }); }}>
+                            <Trash2 className="w-3 h-3" />Delete
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -713,6 +735,39 @@ export default function Admin() {
                 <Button size="sm" disabled={setSettingsM.isPending} onClick={() => setSettingsM.mutate({ customHeadCode: headCode, customBodyCode: bodyCode })}>Save custom code</Button>
                 <p className="text-xs text-muted-foreground">Note: site-verification that requires server-rendered tags may not be detected via runtime injection; analytics/marketing tools work fine.</p>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="support" className="mt-4">
+          <Card className="border-border">
+            <CardContent className="p-0">
+              {supportList.length === 0 ? (
+                <p className="px-4 py-8 text-center text-muted-foreground text-sm">No support messages yet</p>
+              ) : (
+                <div className="divide-y divide-border">
+                  {supportList.map((m) => (
+                    <div key={m.id} className="p-4 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <p className="font-medium text-foreground">{m.subject}</p>
+                          <p className="text-xs text-muted-foreground">{m.userName ? `${m.userName} · ` : ""}{m.userEmail ?? "—"} · {fmtDateTime(m.createdAt)}</p>
+                        </div>
+                        <Badge variant="outline" className={cn("text-xs", m.status === "closed" ? "bg-green-500/10 text-green-600 border-green-200" : "bg-amber-500/10 text-amber-600 border-amber-200")}>{m.status === "closed" ? "Answered" : "Open"}</Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{m.message}</p>
+                      {m.adminReply && (
+                        <div className="rounded-lg border border-primary/20 bg-primary/5 p-2 text-sm text-foreground whitespace-pre-wrap"><span className="text-xs font-semibold text-primary">Your reply: </span>{m.adminReply}</div>
+                      )}
+                      <div className="flex items-start gap-2 pt-1">
+                        <textarea value={supportDrafts[m.id] ?? ""} onChange={(e) => setSupportDrafts((p) => ({ ...p, [m.id]: e.target.value }))} rows={2} placeholder="Write a reply (emailed to the user)…" className="flex-1 rounded-md border border-input bg-background p-2 text-xs" />
+                        <Button size="sm" className="h-8 text-xs gap-1 shrink-0" disabled={replySupport.isPending || !(supportDrafts[m.id] ?? "").trim()} onClick={() => replySupport.mutate({ id: m.id, reply: (supportDrafts[m.id] ?? "").trim(), status: "closed" })}>
+                          <Send className="w-3.5 h-3.5" /> Reply
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

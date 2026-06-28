@@ -393,3 +393,19 @@ ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "signupIp" varchar(64);
 -- Team invitations: email-approval token + accepted timestamp.
 ALTER TABLE "team_members" ADD COLUMN IF NOT EXISTS "inviteToken" varchar(64);
 ALTER TABLE "team_members" ADD COLUMN IF NOT EXISTS "acceptedAt" timestamptz;
+
+
+-- In-app support: messages from users to the platform admin.
+CREATE TABLE IF NOT EXISTS "support_messages" (
+  "id" serial PRIMARY KEY,
+  "userId" integer,
+  "workspaceId" integer,
+  "email" varchar(320),
+  "subject" varchar(512) NOT NULL,
+  "message" text NOT NULL,
+  "status" text DEFAULT 'open',
+  "adminReply" text,
+  "repliedAt" timestamptz,
+  "createdAt" timestamptz NOT NULL DEFAULT now(),
+  "updatedAt" timestamptz NOT NULL DEFAULT now()
+);

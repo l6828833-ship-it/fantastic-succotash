@@ -19,6 +19,7 @@ import {
   MessageSquare,
   Moon,
   Settings,
+  LifeBuoy,
   Shield,
   Sparkles,
   Sun,
@@ -35,7 +36,6 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { toast } from "sonner";
 
@@ -48,7 +48,7 @@ const navItems = [
   { href: "/knowledge", icon: BookOpen, label: "Knowledge Base" },
   { href: "/analytics", icon: BarChart3, label: "Analytics" },
   { href: "/embed", icon: Code2, label: "Embed Code" },
-  { href: "/affiliate", icon: Gift, label: "Affiliate" },
+  { href: "/support", icon: LifeBuoy, label: "Help & Support" },
 ];
 
 const NOTIF_META: Record<string, { icon: React.ElementType; color: string }> = {
@@ -102,24 +102,18 @@ function NotificationBell() {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <div
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer transition-all"
+        <button
+          type="button"
+          title="Notifications"
+          className="relative w-8 h-8 rounded-lg flex items-center justify-center text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent cursor-pointer transition-colors"
         >
-          <div className="relative">
-            <Bell className="w-4 h-4 text-sidebar-foreground/50" />
-            {unreadCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full" />
-            )}
-          </div>
-          <span className="flex-1">Notifications</span>
+          <Bell className="w-4 h-4" />
           {unreadCount > 0 && (
-            <Badge variant="destructive" className="text-xs px-1.5 py-0 h-5">
-              {unreadCount}
-            </Badge>
+            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
           )}
-        </div>
+        </button>
       </PopoverTrigger>
-      <PopoverContent side="right" align="end" className="w-80 p-0" sideOffset={8}>
+      <PopoverContent side="bottom" align="end" className="w-80 p-0" sideOffset={8}>
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <div>
             <p className="text-sm font-semibold text-foreground">Notifications</p>
@@ -194,22 +188,42 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
 
   return (
     <div className="flex flex-col h-full bg-sidebar text-sidebar-foreground">
-      {/* Logo */}
-      <div className="flex items-center justify-between px-4 h-16 border-b border-sidebar-border shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
-            <MessageSquare className="w-4 h-4 text-white" />
+      {/* Logo + quick actions */}
+      <div className="flex items-center justify-between gap-2 px-3 h-16 border-b border-sidebar-border shrink-0">
+        <Link href="/dashboard" className="flex items-center gap-2 min-w-0" onClick={onClose}>
+          <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center shrink-0">
+            <Bot className="w-4 h-4 text-white" />
           </div>
-          <div>
-            <p className="text-sm font-bold text-sidebar-foreground leading-none">Chatrico</p>
-            <p className="text-xs text-sidebar-foreground/40 mt-0.5">AI Platform</p>
-          </div>
+          <p className="text-sm font-bold text-sidebar-foreground leading-none truncate">Chatrico</p>
+        </Link>
+        <div className="flex items-center gap-0.5 shrink-0">
+          <NotificationBell />
+          {user?.role === "admin" && (
+            <Link href="/admin" title="Admin" onClick={onClose} className={cn(
+              "w-8 h-8 rounded-lg flex items-center justify-center transition-colors",
+              currentPath === "/admin" ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent",
+            )}>
+              <Shield className="w-4 h-4" />
+            </Link>
+          )}
+          <Link href="/affiliate" title="Affiliate" onClick={onClose} className={cn(
+            "w-8 h-8 rounded-lg flex items-center justify-center transition-colors",
+            currentPath === "/affiliate" ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent",
+          )}>
+            <Gift className="w-4 h-4" />
+          </Link>
+          <Link href="/settings" title="Settings" onClick={onClose} className={cn(
+            "w-8 h-8 rounded-lg flex items-center justify-center transition-colors",
+            currentPath === "/settings" ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent",
+          )}>
+            <Settings className="w-4 h-4" />
+          </Link>
+          {onClose && (
+            <button type="button" className="w-8 h-8 rounded-lg flex items-center justify-center text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-colors" onClick={onClose}>
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
-        {onClose && (
-          <Button variant="ghost" size="icon" className="text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent" onClick={onClose}>
-            <X className="w-4 h-4" />
-          </Button>
-        )}
       </div>
 
       {/* Navigation */}
@@ -222,38 +236,6 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
               badge={item.href === "/inbox" ? unreadCount : undefined}
             />
           ))}
-        </div>
-
-        <Separator className="my-4 bg-sidebar-border" />
-
-        <div className="space-y-1">
-          <NotificationBell />
-          {user?.role === "admin" && (
-            <Link
-              href="/admin"
-              className={cn(
-                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-                currentPath === "/admin"
-                  ? "bg-sidebar-accent text-sidebar-foreground font-semibold"
-                  : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-              )}
-            >
-              <Shield className="w-4 h-4" />
-              <span>Admin</span>
-            </Link>
-          )}
-          <Link
-            href="/settings"
-            className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-              currentPath === "/settings"
-                ? "bg-sidebar-accent text-sidebar-foreground font-semibold"
-                : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-            )}
-          >
-            <Settings className="w-4 h-4" />
-            <span>Settings</span>
-          </Link>
         </div>
       </ScrollArea>
 
@@ -366,7 +348,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </Sheet>
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center">
-              <MessageSquare className="w-3 h-3 text-white" />
+              <Bot className="w-3 h-3 text-white" />
             </div>
             <span className="font-semibold text-sm">Chatrico</span>
           </div>

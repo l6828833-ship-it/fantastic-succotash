@@ -1475,8 +1475,64 @@ const adminRouter = router({
       return { success: true };
     }),
 
+  // ─── Cancel a workspace's subscription (stop renewal via Stripe; NOT a refund) ─
+  cancelUserSubscription: adminProcedure
+    .input(z.object({ workspaceId: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const ws = await db.getWorkspaceById(input.workspaceId);
+      if (!ws) throw new TRPCError({ code: "NOT_FOUND", message: "Workspace not found" });
+      if (!ws.stripeSubscriptionId) {
+        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "This workspace has no active auto-renewing Stripe subscription." });
+      }
+      // Calls the Stripe API to cancel at period end (no immediate cancel, no refund).
+      await cancelStripeSubscription(ws.stripeSubscriptionId);
+      await db.updateWorkspace(ws.id, { subscriptionCancelAtPeriodEnd: true });
+      await db.createAdminLog({ actorUserId: ctx.user.id, actorEmail: ctx.user.email ?? null, action: "cancel_subscription", targetType: "workspace", targetId: String(ws.id), detail: ws.plan ?? null });
+      return { success: true };
+    }),
+
   // ─── Persisted audit log of admin actions ───────────────────────────────────
   logs: adminProcedure.query(async () => db.getAdminLogs()),
+
+  // ─── Support inbox (messages from users to the platform admin) ──────────────
+  supportMessages: adminProcedure.query(async () => {
+    const [msgs, allUsers] = await Promise.all([db.getAllSupportMessages(), db.getAllUsers()]);
+    const userMap = new Map(allUsers.map((u) => [u.id, u]));
+    return msgs.map((m) => ({
+      ...m,
+      userEmail: m.email ?? (m.userId ? userMap.get(m.userId)?.email : null) ?? null,
+      userName: m.userId ? userMap.get(m.userId)?.name ?? null : null,
+    }));
+  }),
+  replySupport: adminProcedure
+    .input(z.object({ id: z.number(), reply: z.string().max(5000).optional(), status: z.enum(["open", "closed"]).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      const m = await db.getSupportMessageById(input.id);
+      if (!m) throw new TRPCError({ code: "NOT_FOUND", message: "Message not found" });
+      await db.updateSupportMessage(input.id, {
+        adminReply: input.reply ?? m.adminReply,
+        repliedAt: input.reply ? new Date() : m.repliedAt,
+        status: input.status ?? (input.reply ? "closed" : m.status),
+      });
+      // Email the reply to the user if possible.
+      if (input.reply && isEmailConfigured() && m.email) {
+        try {
+          await sendEmail({
+            to: m.email,
+            subject: `Re: ${m.subject}`,
+            html: brandedEmail({
+              title: "Reply from Chatrico Support",
+              bodyHtml: `<p>${input.reply.replace(/</g, "&lt;").replace(/\n/g, "<br/>")}</p><hr/><p style="color:#6b7280;font-size:13px;">In reply to: ${m.subject}</p>`,
+            }),
+            text: input.reply,
+          });
+        } catch (e) {
+          console.error("[Support] reply email failed", e);
+        }
+      }
+      await db.createAdminLog({ actorUserId: ctx.user.id, actorEmail: ctx.user.email ?? null, action: "support_reply", targetType: "support", targetId: String(input.id), detail: input.status ?? null });
+      return { success: true };
+    }),
 
   // ─── Growth charts (signups + revenue, last 30 days) ────────────────────────
   growth: adminProcedure.query(async () => {
@@ -1531,6 +1587,37 @@ const inviteRouter = router({
     await db.acceptTeamMemberInvite(m.id);
     return { success: true };
   }),
+});
+
+// ─── Support (in-app contact with the platform admin) ─────────────────────────
+const supportRouter = router({
+  listMine: protectedProcedure.query(async ({ ctx }) => db.getSupportMessagesByUser(ctx.user.id)),
+  create: protectedProcedure
+    .input(z.object({ subject: z.string().min(1).max(200), message: z.string().min(1).max(5000) }))
+    .mutation(async ({ ctx, input }) => {
+      const ws = await db.getWorkspaceByUserId(ctx.user.id);
+      const msg = await db.createSupportMessage({
+        userId: ctx.user.id,
+        workspaceId: ws?.id,
+        email: ctx.user.email ?? null,
+        subject: input.subject.trim(),
+        message: input.message.trim(),
+        status: "open",
+      });
+      // Notify the platform owner in-app (best-effort).
+      try {
+        if (ws) {
+          await db.createNotification({
+            workspaceId: ws.id,
+            userId: ws.userId,
+            type: "system",
+            title: "New support message",
+            body: input.subject.trim(),
+          });
+        }
+      } catch { /* ignore */ }
+      return msg;
+    }),
 });
 
 // ─── Billing Router ───────────────────────────────────────────────────────────
@@ -1675,6 +1762,7 @@ export const appRouter = router({
   admin: adminRouter,
   appConfig: appConfigRouter,
   invite: inviteRouter,
+  support: supportRouter,
   billing: billingRouter,
 });
 

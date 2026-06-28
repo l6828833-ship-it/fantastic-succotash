@@ -23,6 +23,7 @@ import {
   playgroundSessions,
   qaPairs,
   referrals,
+  supportMessages,
   teamMembers,
   ticketNotes,
   tickets,
@@ -1348,6 +1349,39 @@ export async function getAdminLogs(limit = 200) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(adminLogs).orderBy(desc(adminLogs.createdAt)).limit(limit);
+}
+
+// ─── Support messages (user → platform admin) ─────────────────────────────────
+export async function createSupportMessage(data: typeof supportMessages.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db.insert(supportMessages).values(data).returning();
+  return row;
+}
+
+export async function getSupportMessagesByUser(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(supportMessages).where(eq(supportMessages.userId, userId)).orderBy(desc(supportMessages.createdAt));
+}
+
+export async function getAllSupportMessages(limit = 300) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(supportMessages).orderBy(desc(supportMessages.createdAt)).limit(limit);
+}
+
+export async function getSupportMessageById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const r = await db.select().from(supportMessages).where(eq(supportMessages.id, id)).limit(1);
+  return r[0];
+}
+
+export async function updateSupportMessage(id: number, data: Partial<typeof supportMessages.$inferInsert>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(supportMessages).set(data).where(eq(supportMessages.id, id));
 }
 
 export async function getAppSetting(key: string): Promise<string | null> {

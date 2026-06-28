@@ -107,7 +107,14 @@ const COMPANY_SIZE_OPTIONS = [
 export default function Settings() {
   const { user } = useAuth();
   const { show: showUpgrade } = useUpgrade();
-  const [activeTab, setActiveTab] = useState("workspace");
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const t = new URLSearchParams(window.location.search).get("tab");
+      const allowed = ["workspace", "team", "email", "account", "notifications", "integrations", "billing", "security"];
+      if (t && allowed.includes(t)) return t;
+    } catch { /* ignore */ }
+    return "workspace";
+  });
   const [saved, setSaved] = useState(false);
 
   // Workspace state
