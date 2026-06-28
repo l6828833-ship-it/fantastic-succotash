@@ -52,7 +52,7 @@ export default function Login() {
           <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
             <Bot className="w-6 h-6 text-primary" />
           </div>
-          <h1 className="text-xl font-bold text-foreground">Welcome to ChatBot Pro</h1>
+          <h1 className="text-xl font-bold text-foreground">Welcome to Chatrico</h1>
           <p className="text-sm text-muted-foreground">
             {mode === "login" ? "Sign in to your account" : "Create your account to get started"}
           </p>

@@ -151,7 +151,7 @@ export default function Onboarding() {
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
             <MessageSquare className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-foreground">ChatBot Pro</span>
+          <span className="font-bold text-foreground">Chatrico</span>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm text-muted-foreground">Step {step} of {steps.length}</span>

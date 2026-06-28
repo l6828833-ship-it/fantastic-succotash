@@ -94,7 +94,7 @@ export function escapeHtml(s: string): string {
 // A simple branded HTML wrapper used for transactional emails (ticket
 // confirmations, etc.). Brand name comes from EMAIL_FROM_NAME.
 export function brandedEmail(opts: { title: string; bodyHtml: string }): string {
-  const brand = escapeHtml(ENV.emailFromName || "ChatBot Pro");
+  const brand = escapeHtml(ENV.emailFromName || "Chatrico");
   return [
     '<div style="background:#f4f4f7;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;">',
     '<div style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">',
