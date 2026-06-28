@@ -245,8 +245,8 @@ export function registerLocalAuthRoutes(app: Express) {
   });
 
   // ── Reset password step 1: request an email verification code ───────────────
-  // Always responds with success (even for unknown emails) so the endpoint
-  // can't be used to discover which addresses have accounts.
+  // Only accounts that actually exist (and have a password) can request a reset;
+  // unknown emails get a clear "no account" error so they sign up instead.
   app.post("/api/auth/reset/request", async (req: Request, res: Response) => {
     try {
       const body = (req.body ?? {}) as { email?: string };
@@ -264,35 +264,42 @@ export function registerLocalAuthRoutes(app: Express) {
       }
 
       const user = await db.getUserByEmail(email);
-      // Only send a code to real password accounts, but never reveal that.
-      if (user && user.passwordHash) {
-        const code = generateOtp();
-        await db.createAuthOtp({
-          email,
-          codeHash: hashOtp(code),
-          purpose: "reset",
-          payload: {},
-          expiresAt: new Date(Date.now() + OTP_TTL_MS),
-        });
+      // Block reset for emails that don't have a password account.
+      if (!user) {
+        res.status(404).json({ error: "No account found with that email. Please sign up first." });
+        return;
+      }
+      if (!user.passwordHash) {
+        res.status(409).json({ error: "This account uses GitHub sign-in, so it has no password to reset. Continue with GitHub instead." });
+        return;
+      }
 
-        try {
-          await sendEmail({
-            to: email,
-            subject: "Your Chatrico password reset code",
-            html: brandedEmail({
-              title: "Reset your password",
-              bodyHtml:
-                `<p>Use this code to reset your Chatrico password:</p>` +
-                `<div style="font-size:30px;font-weight:700;letter-spacing:6px;margin:16px 0;color:#111827;">${code}</div>` +
-                `<p style="color:#6b7280;font-size:13px;">This code expires in 10 minutes. If you didn't request a password reset, you can safely ignore this email.</p>`,
-            }),
-            text: `Your Chatrico password reset code is ${code}. It expires in 10 minutes.`,
-          });
-        } catch (err) {
-          console.error("[Auth] failed to send reset email", err);
-          res.status(502).json({ error: "We couldn't send the reset email. Please try again shortly." });
-          return;
-        }
+      const code = generateOtp();
+      await db.createAuthOtp({
+        email,
+        codeHash: hashOtp(code),
+        purpose: "reset",
+        payload: {},
+        expiresAt: new Date(Date.now() + OTP_TTL_MS),
+      });
+
+      try {
+        await sendEmail({
+          to: email,
+          subject: "Your Chatrico password reset code",
+          html: brandedEmail({
+            title: "Reset your password",
+            bodyHtml:
+              `<p>Use this code to reset your Chatrico password:</p>` +
+              `<div style="font-size:30px;font-weight:700;letter-spacing:6px;margin:16px 0;color:#111827;">${code}</div>` +
+              `<p style="color:#6b7280;font-size:13px;">This code expires in 10 minutes. If you didn't request a password reset, you can safely ignore this email.</p>`,
+          }),
+          text: `Your Chatrico password reset code is ${code}. It expires in 10 minutes.`,
+        });
+      } catch (err) {
+        console.error("[Auth] failed to send reset email", err);
+        res.status(502).json({ error: "We couldn't send the reset email. Please try again shortly." });
+        return;
       }
 
       res.json({ success: true, otp: true });
