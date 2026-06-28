@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { invokeLLM, type Message as LLMMessage } from "./llm";
 import { createCustomerTicket } from "./ticketing";
-import { requestBaseUrl } from "./email";
+import { requestBaseUrl, readableBrandColor } from "./email";
 
 // The embeddable widget runs on third-party websites, so these routes must be
 // public (no auth) and CORS-enabled.
@@ -459,8 +459,9 @@ const WIDGET_JS = `(function(){
       if (data && data.mode === "human"){
         var notice = data.escalationMessage || null;
         if (data.humanAvailable === false){
-          // No human online right now — offer a ticket instead of a false promise.
-          if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", notice || data.offlineMessage || "Our team is offline right now. Leave a ticket and we'll reply by email."); }
+          // No human online right now — show the offline message and offer a
+          // ticket, NOT the "connecting you to our team" escalation notice.
+          if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", data.offlineMessage || "No one's available right now. Leave a ticket and we'll get back to you by email."); }
           if (ticketMode !== "off"){ revealTicketButton(); }
         } else {
           // A human will answer from the Inbox; their reply arrives via polling.
@@ -579,7 +580,7 @@ export function registerWidgetRoutes(app: Express) {  // The widget loader scrip
         id: agent.id,
         name: agent.name,
         welcomeMessage: agent.welcomeMessage ?? "Hi! How can I help you today?",
-        color: agent.widgetColor ?? "#6366f1",
+        color: readableBrandColor(agent.widgetColor),
         position: agent.widgetPosition ?? "bottom-right",
         size: agent.widgetSize ?? "standard",
         theme: agent.widgetTheme ?? "light",
