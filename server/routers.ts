@@ -9,6 +9,7 @@ import { invokeLLM, type Message as LLMMessage } from "./_core/llm";
 import { ENV } from "./_core/env";
 import {
   brandedEmail,
+  getWorkspaceEmailBranding,
   isEmailConfigured,
   sendBulkEmails,
   sendEmail,
@@ -41,6 +42,12 @@ const workspaceRouter = router({
       supportOnline: z.boolean().optional(),
       onboardingCompleted: z.boolean().optional(),
       onboardingStep: z.number().optional(),
+      // Email branding
+      emailBrandName: z.string().max(255).optional().nullable(),
+      emailLogoUrl: z.string().max(2048).optional().nullable(),
+      emailBrandColor: z.string().max(32).optional().nullable(),
+      supportEmail: z.string().max(320).optional().nullable(),
+      emailSignature: z.string().max(2000).optional().nullable(),
     }))
     .mutation(async ({ ctx, input }) => {
       let workspace = await db.getWorkspaceByUserId(ctx.user.id);
@@ -477,8 +484,10 @@ const ticketsRouter = router({
       if (contact?.email && isEmailConfigured()) {
         try {
           const who = contact.name || "there";
+          const { brand, replyTo } = await getWorkspaceEmailBranding(workspace.id);
           await sendEmail({
             to: contact.email,
+            replyTo,
             subject: `We received your request: ${input.title}`,
             html: brandedEmail({
               title: "We've got your request",
@@ -487,6 +496,7 @@ const ticketsRouter = router({
                 `<p>Thanks for reaching out. We've created a support ticket for you and our team will get back to you soon.</p>` +
                 `<p style="color:#6b7280;"><strong>Subject:</strong> ${input.title}</p>` +
                 (input.description ? `<p style="color:#6b7280;"><strong>Details:</strong> ${input.description}</p>` : ""),
+              brand,
             }),
             text: `Hi ${who},\n\nThanks for reaching out. We've created a support ticket ("${input.title}") and our team will get back to you soon.`,
           });
@@ -801,6 +811,7 @@ const campaignsRouter = router({
     const bodyTemplate = campaign.message;
     const workspaceId = workspace.id;
     const userId = ctx.user.id;
+    const replyTo = workspace.supportEmail || undefined;
 
     await db.updateCampaign(campaign.id, { status: "running", sentCount: 0 });
 
@@ -815,6 +826,7 @@ const campaignsRouter = router({
             const body = personalize(bodyTemplate, { name: contact.name, email: contact.email });
             return {
               to: contact.email as string,
+              replyTo,
               subject: personalize(subject, { name: contact.name, email: contact.email }),
               html: renderCampaignHtml(body, unsub),
               text: `${body}\n\nUnsubscribe: ${unsub}`,

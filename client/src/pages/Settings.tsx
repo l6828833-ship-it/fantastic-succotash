@@ -59,6 +59,13 @@ export default function Settings() {
   const [industry, setIndustry] = useState("");
   const [companySize, setCompanySize] = useState("");
 
+  // Email branding
+  const [emailBrandName, setEmailBrandName] = useState("");
+  const [emailLogoUrl, setEmailLogoUrl] = useState("");
+  const [emailBrandColor, setEmailBrandColor] = useState("#6366f1");
+  const [supportEmail, setSupportEmail] = useState("");
+  const [emailSignature, setEmailSignature] = useState("");
+
   // Notification prefs
   const [notifEscalation, setNotifEscalation] = useState(true);
   const [notifNewTicket, setNotifNewTicket] = useState(true);
@@ -107,11 +114,26 @@ export default function Settings() {
       setCompanyWebsite(workspace.companyWebsite ?? "");
       setIndustry(workspace.industry ?? "");
       setCompanySize(workspace.companySize ?? "");
+      setEmailBrandName(workspace.emailBrandName ?? "");
+      setEmailLogoUrl(workspace.emailLogoUrl ?? "");
+      setEmailBrandColor(workspace.emailBrandColor ?? "#6366f1");
+      setSupportEmail(workspace.supportEmail ?? "");
+      setEmailSignature(workspace.emailSignature ?? "");
     }
   }, [workspace]);
 
   const handleSaveWorkspace = () => {
     updateWorkspace.mutate({ companyName, companyWebsite, industry, companySize });
+  };
+
+  const handleSaveEmailBranding = () => {
+    updateWorkspace.mutate({
+      emailBrandName: emailBrandName.trim() || null,
+      emailLogoUrl: emailLogoUrl.trim() || null,
+      emailBrandColor: emailBrandColor.trim() || null,
+      supportEmail: supportEmail.trim() || null,
+      emailSignature: emailSignature.trim() || null,
+    });
   };
 
   const currentPlan = workspace?.plan ?? "starter";
@@ -128,6 +150,7 @@ export default function Settings() {
           {[
             { id: "workspace", label: "Workspace", icon: Building2 },
             { id: "team", label: "Team", icon: Users },
+            { id: "email", label: "Email Branding", icon: Mail },
             { id: "account", label: "My Account", icon: User },
             { id: "notifications", label: "Notifications", icon: Bell },
             { id: "integrations", label: "Integrations", icon: Puzzle },
@@ -324,6 +347,100 @@ export default function Settings() {
                 )}
               </CardContent>
             </Card>
+          </div>
+        )}
+
+        {/* Email Branding */}
+        {activeTab === "email" && (
+          <div className="p-6 max-w-4xl space-y-6">
+            <div>
+              <h3 className="text-lg font-semibold text-foreground">Email Branding</h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Customize the transactional emails customers receive (ticket confirmations, etc.). Emails are sent from Chatrico for reliable delivery, with replies going to your support address.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Form */}
+              <Card className="border-border">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-base">Branding</CardTitle>
+                  <CardDescription>Applied to every customer email from this workspace.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-1.5">
+                    <Label>Brand name</Label>
+                    <Input value={emailBrandName} onChange={(e) => setEmailBrandName(e.target.value)} placeholder="Acme Support" />
+                    <p className="text-xs text-muted-foreground">Shown in the email header and footer.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Support email (Reply-To)</Label>
+                    <Input type="email" value={supportEmail} onChange={(e) => setSupportEmail(e.target.value)} placeholder="support@yourcompany.com" />
+                    <p className="text-xs text-muted-foreground">When a customer replies to an email, it goes here.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Brand color</Label>
+                    <div className="flex items-center gap-3">
+                      <input type="color" value={/^#[0-9a-fA-F]{6}$/.test(emailBrandColor) ? emailBrandColor : "#6366f1"} onChange={(e) => setEmailBrandColor(e.target.value)} className="w-10 h-10 rounded-lg border border-border cursor-pointer" />
+                      <Input value={emailBrandColor} onChange={(e) => setEmailBrandColor(e.target.value)} className="font-mono text-sm" placeholder="#6366f1" />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Logo URL</Label>
+                    <Input value={emailLogoUrl} onChange={(e) => setEmailLogoUrl(e.target.value)} placeholder="https://yourcompany.com/logo.png" />
+                    <p className="text-xs text-muted-foreground">Optional. A hosted image URL shown in the email header instead of the brand name.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Email signature</Label>
+                    <textarea
+                      value={emailSignature}
+                      onChange={(e) => setEmailSignature(e.target.value)}
+                      placeholder={"Thanks,\nThe Acme Team"}
+                      rows={3}
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm resize-none"
+                    />
+                    <p className="text-xs text-muted-foreground">Optional. Added to the bottom of the email body.</p>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button onClick={handleSaveEmailBranding} disabled={updateWorkspace.isPending} className="gap-2">
+                      {saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
+                      {updateWorkspace.isPending ? "Saving..." : "Save branding"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Live preview */}
+              <div className="space-y-2">
+                <div className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-primary" /> Live preview
+                </div>
+                <div className="rounded-2xl border border-border bg-[#f4f4f7] p-4">
+                  <div className="max-w-[480px] mx-auto bg-white border border-[#e5e7eb] rounded-[14px] overflow-hidden">
+                    <div className="px-6 py-4" style={{ background: /^#[0-9a-fA-F]{3,8}$/.test(emailBrandColor) ? emailBrandColor : "#6366f1" }}>
+                      {emailLogoUrl ? (
+                        <img src={emailLogoUrl} alt={emailBrandName || "Logo"} className="max-h-8 max-w-[180px] object-contain" />
+                      ) : (
+                        <span className="text-white font-bold text-base">{emailBrandName || "Chatrico"}</span>
+                      )}
+                    </div>
+                    <div className="px-6 py-5 text-[#111827]">
+                      <h2 className="text-[17px] font-semibold m-0 mb-3">We've got your request</h2>
+                      <p className="text-sm leading-relaxed m-0">Hi there,</p>
+                      <p className="text-sm leading-relaxed mt-2">Thanks for reaching out. We've created a support ticket for you and our team will get back to you soon.</p>
+                      <p className="text-sm text-[#6b7280] mt-2"><strong>Subject:</strong> Help with my order</p>
+                      {emailSignature && <p className="text-[13px] text-[#6b7280] mt-4 whitespace-pre-line">{emailSignature}</p>}
+                    </div>
+                    <div className="px-6 py-3.5 border-t border-[#e5e7eb] text-[#9ca3af] text-xs">
+                      Sent by {emailBrandName || "Chatrico"}
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Reply-To: <span className="font-medium text-foreground">{supportEmail || "(your support email)"}</span>
+                </p>
+              </div>
+            </div>
           </div>
         )}
 

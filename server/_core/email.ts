@@ -30,6 +30,42 @@ export interface EmailMessage {
   subject: string;
   html: string;
   text?: string;
+  replyTo?: string;
+}
+
+// Per-workspace email branding applied to transactional emails.
+export interface EmailBranding {
+  name?: string | null;
+  logoUrl?: string | null;
+  color?: string | null;
+  signature?: string | null;
+}
+
+// Only allow safe hex colors in the email HTML (avoids CSS/style injection via
+// the brand-color field). Returns null for anything else.
+function safeColor(c?: string | null): string | null {
+  return c && /^#[0-9a-fA-F]{3,8}$/.test(c.trim()) ? c.trim() : null;
+}
+
+// Resolve a workspace's email branding + reply-to, with sensible fallbacks to
+// the platform defaults. Never throws.
+export async function getWorkspaceEmailBranding(
+  workspaceId: number,
+): Promise<{ brand: EmailBranding; replyTo?: string }> {
+  try {
+    const ws = await db.getWorkspaceById(workspaceId);
+    return {
+      brand: {
+        name: ws?.emailBrandName || ENV.emailFromName || "Chatrico",
+        logoUrl: ws?.emailLogoUrl || null,
+        color: ws?.emailBrandColor || null,
+        signature: ws?.emailSignature || null,
+      },
+      replyTo: ws?.supportEmail || undefined,
+    };
+  } catch {
+    return { brand: {} };
+  }
 }
 
 // Send via the Brevo HTTP API. Preferred on hosts that block outbound SMTP
@@ -48,6 +84,7 @@ async function sendViaBrevo(msg: EmailMessage): Promise<void> {
       subject: msg.subject,
       htmlContent: msg.html,
       ...(msg.text ? { textContent: msg.text } : {}),
+      ...(msg.replyTo ? { replyTo: { email: msg.replyTo } } : {}),
     }),
   });
   if (!res.ok) {
@@ -68,7 +105,7 @@ export async function sendEmail(msg: EmailMessage): Promise<void> {
   const transporter = getTransporter();
   if (!transporter) throw new Error("Email is not configured (set SMTP_HOST and EMAIL_FROM)");
   const from = ENV.emailFromName ? `"${ENV.emailFromName}" <${ENV.emailFrom}>` : ENV.emailFrom;
-  await transporter.sendMail({ from, to: msg.to, subject: msg.subject, html: msg.html, text: msg.text });
+  await transporter.sendMail({ from, to: msg.to, subject: msg.subject, html: msg.html, text: msg.text, replyTo: msg.replyTo });
 }
 
 
@@ -125,17 +162,27 @@ export function escapeHtml(s: string): string {
 
 // A simple branded HTML wrapper used for transactional emails (ticket
 // confirmations, etc.). Brand name comes from EMAIL_FROM_NAME.
-export function brandedEmail(opts: { title: string; bodyHtml: string }): string {
-  const brand = escapeHtml(ENV.emailFromName || "Chatrico");
+export function brandedEmail(opts: { title: string; bodyHtml: string; brand?: EmailBranding }): string {
+  const b = opts.brand ?? {};
+  const name = escapeHtml(b.name || ENV.emailFromName || "Chatrico");
+  const color = safeColor(b.color) || "#6366f1";
+  const logo = b.logoUrl ? escapeHtml(b.logoUrl) : "";
+  const header = logo
+    ? `<div style="background:${color};padding:16px 24px;"><img src="${logo}" alt="${name}" style="max-height:34px;max-width:200px;vertical-align:middle;"></div>`
+    : `<div style="background:${color};color:#fff;padding:16px 24px;font-weight:700;font-size:16px;">${name}</div>`;
+  const signature = b.signature
+    ? `<p style="margin:18px 0 0;color:#6b7280;font-size:13px;white-space:pre-line;">${escapeHtml(b.signature)}</p>`
+    : "";
   return [
     '<div style="background:#f4f4f7;padding:24px 12px;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;">',
     '<div style="max-width:520px;margin:0 auto;background:#ffffff;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">',
-    `<div style="background:#6366f1;color:#fff;padding:16px 24px;font-weight:700;font-size:16px;">${brand}</div>`,
+    header,
     '<div style="padding:24px;color:#111827;font-size:15px;line-height:1.6;">',
     `<h2 style="margin:0 0 12px;font-size:18px;">${escapeHtml(opts.title)}</h2>`,
     opts.bodyHtml,
+    signature,
     '</div>',
-    `<div style="padding:14px 24px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:12px;">Sent by ${brand}</div>`,
+    `<div style="padding:14px 24px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:12px;">Sent by ${name}</div>`,
     '</div></div>',
   ].join("");
 }
