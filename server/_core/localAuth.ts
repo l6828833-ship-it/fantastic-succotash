@@ -243,4 +243,120 @@ export function registerLocalAuthRoutes(app: Express) {
       res.status(500).json({ error: "Something went wrong. Please try again." });
     }
   });
+
+  // ── Reset password step 1: request an email verification code ───────────────
+  // Always responds with success (even for unknown emails) so the endpoint
+  // can't be used to discover which addresses have accounts.
+  app.post("/api/auth/reset/request", async (req: Request, res: Response) => {
+    try {
+      const body = (req.body ?? {}) as { email?: string };
+      const email = String(body.email ?? "").trim().toLowerCase();
+
+      if (!EMAIL_RE.test(email)) {
+        res.status(400).json({ error: "Please enter a valid email address." });
+        return;
+      }
+
+      // Password reset by code requires a configured mail provider.
+      if (!isEmailConfigured()) {
+        res.status(503).json({ error: "Password reset is unavailable right now. Please contact support." });
+        return;
+      }
+
+      const user = await db.getUserByEmail(email);
+      // Only send a code to real password accounts, but never reveal that.
+      if (user && user.passwordHash) {
+        const code = generateOtp();
+        await db.createAuthOtp({
+          email,
+          codeHash: hashOtp(code),
+          purpose: "reset",
+          payload: {},
+          expiresAt: new Date(Date.now() + OTP_TTL_MS),
+        });
+
+        try {
+          await sendEmail({
+            to: email,
+            subject: "Your Chatrico password reset code",
+            html: brandedEmail({
+              title: "Reset your password",
+              bodyHtml:
+                `<p>Use this code to reset your Chatrico password:</p>` +
+                `<div style="font-size:30px;font-weight:700;letter-spacing:6px;margin:16px 0;color:#111827;">${code}</div>` +
+                `<p style="color:#6b7280;font-size:13px;">This code expires in 10 minutes. If you didn't request a password reset, you can safely ignore this email.</p>`,
+            }),
+            text: `Your Chatrico password reset code is ${code}. It expires in 10 minutes.`,
+          });
+        } catch (err) {
+          console.error("[Auth] failed to send reset email", err);
+          res.status(502).json({ error: "We couldn't send the reset email. Please try again shortly." });
+          return;
+        }
+      }
+
+      res.json({ success: true, otp: true });
+    } catch (error) {
+      console.error("[Auth] reset request failed", error);
+      res.status(500).json({ error: "Something went wrong. Please try again." });
+    }
+  });
+
+  // ── Reset password step 2: verify the code and set the new password ─────────
+  app.post("/api/auth/reset/verify", async (req: Request, res: Response) => {
+    try {
+      const body = (req.body ?? {}) as { email?: string; code?: string; password?: string };
+      const email = String(body.email ?? "").trim().toLowerCase();
+      const code = String(body.code ?? "").trim();
+      const password = String(body.password ?? "");
+
+      if (!EMAIL_RE.test(email) || !/^\d{4,8}$/.test(code)) {
+        res.status(400).json({ error: "Enter the code we emailed you." });
+        return;
+      }
+      if (password.length < 8) {
+        res.status(400).json({ error: "Password must be at least 8 characters." });
+        return;
+      }
+
+      const otp = await db.getLatestAuthOtp(email, "reset");
+      if (!otp) {
+        res.status(400).json({ error: "No active code. Please request a new one." });
+        return;
+      }
+      if (new Date(otp.expiresAt).getTime() < Date.now()) {
+        await db.deleteAuthOtp(otp.id);
+        res.status(400).json({ error: "This code has expired. Please request a new one." });
+        return;
+      }
+      if ((otp.attempts ?? 0) >= OTP_MAX_ATTEMPTS) {
+        await db.deleteAuthOtp(otp.id);
+        res.status(429).json({ error: "Too many attempts. Please request a new code." });
+        return;
+      }
+      if (!otpMatches(code, otp.codeHash)) {
+        await db.bumpAuthOtpAttempts(otp.id);
+        res.status(400).json({ error: "That code isn't right. Please try again." });
+        return;
+      }
+
+      const user = await db.getUserByEmail(email);
+      if (!user) {
+        await db.deleteAuthOtp(otp.id);
+        res.status(400).json({ error: "We couldn't find that account. Please sign up instead." });
+        return;
+      }
+
+      const passwordHash = await hashPassword(password);
+      await db.updateUserPassword(user.openId, passwordHash);
+      await db.deleteAuthOtp(otp.id);
+
+      // Sign the user straight in after a successful reset.
+      await issueSession(req, res, user.openId, user.name ?? email);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("[Auth] reset verify failed", error);
+      res.status(500).json({ error: "Something went wrong. Please try again." });
+    }
+  });
 }

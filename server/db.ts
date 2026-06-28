@@ -177,6 +177,18 @@ export async function createUser(data: typeof users.$inferInsert) {
   return row;
 }
 
+// Update an existing user's password hash (used by the reset-password flow).
+export async function updateUserPassword(openId: string, passwordHash: string) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db
+    .update(users)
+    .set({ passwordHash, lastSignedIn: new Date() })
+    .where(eq(users.openId, openId))
+    .returning();
+  return row;
+}
+
 // ─── Auth OTP codes ───────────────────────────────────────────────────────────
 export async function createAuthOtp(data: typeof authOtps.$inferInsert) {
   const db = await getDb();
