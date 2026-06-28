@@ -256,10 +256,17 @@ export default function Settings() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const up = params.get("upgrade");
+    const tab = params.get("tab");
     if (up && ["starter", "pro", "business"].includes(up)) {
       setActiveTab("billing");
       setPayPlan(up);
       params.delete("upgrade");
+      const qs = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
+    } else if (tab) {
+      // Open a specific settings tab directly (e.g. /settings?tab=billing).
+      setActiveTab(tab);
+      params.delete("tab");
       const qs = params.toString();
       window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
     }
