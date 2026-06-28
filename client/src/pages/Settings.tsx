@@ -3,7 +3,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { useState, useEffect } from "react";
 import {
   Building2, Bell, Puzzle, CreditCard, User, Save, Check, Globe, Users, Mail,
-  Zap, Shield, ChevronRight, AlertCircle, CheckCircle2, ExternalLink, Plus, Trash2, UserPlus, Bitcoin, Loader2,
+  Zap, Shield, ChevronRight, ChevronDown, Lock, AlertCircle, CheckCircle2, ExternalLink, Plus, Trash2, UserPlus, Bitcoin, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,6 +63,35 @@ const PLAN_CONFIG = {
     features: ["Unlimited agents", "Unlimited conversations", "Custom integrations", "SLA guarantee", "Dedicated support"],
   },
 };
+
+// Plan tiers in ascending order — index aligns with FEATURE_MATRIX values.
+const PLAN_ORDER = ["free", "starter", "pro", "business", "enterprise"];
+
+// Full feature matrix shown in the billing "See all features" view. Each value
+// is per plan in PLAN_ORDER. "—" means the feature is not included on that plan
+// (clicking it prompts an upgrade); anything else counts as included.
+const FEATURE_MATRIX: { label: string; values: string[] }[] = [
+  { label: "AI agents", values: ["1", "2", "5", "15", "Unlimited"] },
+  { label: "AI conversations / mo", values: ["50", "1,000", "6,000", "20,000", "Unlimited"] },
+  { label: "Human conversations", values: ["Unlimited", "Unlimited", "Unlimited", "Unlimited", "Unlimited"] },
+  { label: "Contacts stored", values: ["30", "1,000", "5,000", "25,000", "Unlimited"] },
+  { label: "Tickets (create & respond)", values: ["30 / mo", "Unlimited", "Unlimited", "Unlimited", "Unlimited"] },
+  { label: "Team seats", values: ["1", "2", "10", "25", "Unlimited"] },
+  { label: "Knowledge base (Q&A + articles)", values: ["✓", "✓", "✓", "✓", "✓"] },
+  { label: "Learn from website URL", values: ["—", "✓", "✓", "✓", "✓"] },
+  { label: "Widget styling", values: ["✓", "✓", "✓", "✓", "✓"] },
+  { label: "Premium launcher icons", values: ["—", "✓", "✓", "✓", "✓"] },
+  { label: 'Remove "Powered by Chatrico"', values: ["—", "✓", "✓", "✓", "✓"] },
+  { label: "Lead capture", values: ["✓", "✓", "✓", "✓", "✓"] },
+  { label: "Email-to-ticket + reply portal", values: ["✓", "✓", "✓", "✓", "✓"] },
+  { label: "Human handoff / live Inbox + escalation", values: ["—", "✓", "✓", "✓", "✓"] },
+  { label: "Email branding (logo/reply-to/signature)", values: ["—", "—", "✓", "✓", "✓"] },
+  { label: "Segments + CSV export", values: ["—", "—", "✓", "✓", "✓"] },
+  { label: "Analytics", values: ["Basic", "Standard", "Advanced", "Advanced + export", "Advanced + export"] },
+  { label: "Multi-language replies", values: ["✓", "✓", "✓", "✓", "✓"] },
+  { label: "Support", values: ["Community", "Email", "Priority", "Priority + onboarding", "SLA + dedicated"] },
+  { label: "Affiliate program", values: ["✓", "✓", "✓", "✓", "✓"] },
+];
 
 const INDUSTRY_OPTIONS = [
   "Information Technology", "E-Commerce & Retail", "Banking & Finance",
@@ -184,6 +213,22 @@ export default function Settings() {
     },
     onError: (e) => toast.error(e.message || "Could not cancel the subscription"),
   });
+  const [showAllFeatures, setShowAllFeatures] = useState(false);
+  // Where the current plan sits in the tier order (legacy "growth" → "pro").
+  const planTier = currentPlan === "growth" ? "pro" : currentPlan;
+  const planIdx = Math.max(0, PLAN_ORDER.indexOf(planTier));
+  // Lowest purchasable plan that unlocks the given feature row (for upgrade CTA).
+  const suggestUpgradeFor = (values: string[]): string | null => {
+    for (let j = 0; j < PLAN_ORDER.length; j++) {
+      if (values[j] !== "—" && PURCHASABLE.includes(PLAN_ORDER[j])) return PLAN_ORDER[j];
+    }
+    return null;
+  };
+  const onLockedFeature = (row: { label: string; values: string[] }) => {
+    const target = suggestUpgradeFor(row.values);
+    if (target) setPayPlan(target); // opens the existing upgrade / payment dialog
+    else toast.info("Contact sales@chatrico.com to unlock this feature.");
+  };
   // Surface the result when the user returns from a payment provider.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -761,6 +806,55 @@ export default function Settings() {
                   <p className="text-sm text-muted-foreground">Loading usage…</p>
                 )}
               </CardContent>
+            </Card>
+
+            {/* See all features — locked ones open an upgrade prompt */}
+            <Card className="border-border">
+              <CardHeader className="pb-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <CardTitle className="text-base">Features on your plan</CardTitle>
+                    <CardDescription>You're on {planInfo.name}. Tap a locked feature to upgrade and unlock it.</CardDescription>
+                  </div>
+                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1 shrink-0" onClick={() => setShowAllFeatures((s) => !s)}>
+                    {showAllFeatures ? "Hide" : "See all features"}
+                    <ChevronDown className={"w-3.5 h-3.5 transition-transform " + (showAllFeatures ? "rotate-180" : "")} />
+                  </Button>
+                </div>
+              </CardHeader>
+              {showAllFeatures && (
+                <CardContent className="space-y-0.5">
+                  {FEATURE_MATRIX.map((row) => {
+                    const val = row.values[planIdx];
+                    const included = val !== "—";
+                    return (
+                      <button
+                        key={row.label}
+                        type="button"
+                        disabled={included}
+                        onClick={() => onLockedFeature(row)}
+                        className={cn(
+                          "w-full flex items-center justify-between gap-3 py-2 px-2 rounded-md text-sm text-left transition-colors",
+                          included ? "cursor-default" : "hover:bg-accent/50 cursor-pointer"
+                        )}
+                      >
+                        <span className={included ? "text-foreground" : "text-muted-foreground"}>{row.label}</span>
+                        {included ? (
+                          val === "✓" ? (
+                            <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                          ) : (
+                            <span className="text-xs font-medium text-foreground shrink-0">{val}</span>
+                          )
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-primary shrink-0">
+                            <Lock className="w-3 h-3" /> Upgrade
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </CardContent>
+              )}
             </Card>
 
             {/* Plan comparison */}

@@ -77,19 +77,19 @@ const TESTIMONIALS = [
 ];
 
 const PLANS = [
-  { id: "free", name: "Free", price: "$0", period: "", highlight: false, blurb: "To get started", features: [
+  { id: "free", name: "Free", price: "$0", period: "", highlight: false, blurb: "To get started", highlights: ["1 AI agent", "50 AI conversations / mo", "Unlimited human conversations", "30 contacts stored", "30 tickets / mo"], features: [
     "1 AI agent", "50 AI conversations / mo", "Unlimited human conversations", "30 contacts stored",
     "30 tickets / mo (create & respond)", "Knowledge base", "Embed on any site", "Widget styling",
     "Lead capture", "Multi-language replies", "Basic analytics", "Community support", "Affiliate program",
   ] },
-  { id: "starter", name: "Starter", price: "$9.99", period: "/mo", highlight: false, blurb: "For small sites", features: [
+  { id: "starter", name: "Starter", price: "$9.99", period: "/mo", highlight: false, blurb: "For small sites", highlights: ["2 AI agents", "1,000 AI conversations / mo", "Unlimited tickets", "Human handoff & live inbox", "Remove branding"], features: [
     "2 AI agents", "1,000 AI conversations / mo", "Unlimited human conversations", "1,000 contacts",
     "Unlimited tickets (create & respond)", "Knowledge base", "Embed on any site", "Learn from your website",
     "Widget styling", "Premium icons + remove branding", "Lead capture", "Human handoff & live inbox",
     "Escalation rules", "Tickets & email-to-ticket", "Standard analytics", "Multi-language replies",
     "Email support", "Affiliate program",
   ] },
-  { id: "pro", name: "Pro", price: "$49", period: "/mo", highlight: true, blurb: "For growing teams", features: [
+  { id: "pro", name: "Pro", price: "$49", period: "/mo", highlight: true, blurb: "For growing teams", highlights: ["5 AI agents", "6,000 AI conversations / mo", "5,000 contacts", "Email branding + CSV export", "Advanced analytics", "10 team seats"], features: [
     "5 AI agents", "6,000 AI conversations / mo", "Unlimited human conversations", "5,000 contacts",
     "Unlimited tickets (create & respond)", "Knowledge base", "Embed on any site", "Learn from your website",
     "Widget styling", "Premium icons + remove branding", "Lead capture", "Human handoff & live inbox",
@@ -97,7 +97,7 @@ const PLANS = [
     "Segments + CSV export", "Advanced analytics", "Multi-language replies", "10 team seats",
     "Priority support", "Affiliate program",
   ] },
-  { id: "business", name: "Business", price: "$129", period: "/mo", highlight: false, blurb: "For scale", features: [
+  { id: "business", name: "Business", price: "$129", period: "/mo", highlight: false, blurb: "For scale", highlights: ["15 AI agents", "20,000 AI conversations / mo", "25,000 contacts", "Advanced analytics + export", "25 team seats", "Priority support + onboarding"], features: [
     "15 AI agents", "20,000 AI conversations / mo", "Unlimited human conversations", "25,000 contacts",
     "Unlimited tickets (create & respond)", "Knowledge base", "Embed on any site", "Learn from your website",
     "Widget styling", "Premium icons + remove branding", "Lead capture", "Human handoff & live inbox",
@@ -159,10 +159,52 @@ function FaqItem({ q, a }: { q: string; a: string }) {
   );
 }
 
+function PlanCard({ p }: { p: (typeof PLANS)[number] }) {
+  const [open, setOpen] = useState(false);
+  const shown = open ? p.features : p.highlights;
+  return (
+    <div className={"rounded-2xl border p-6 bg-card relative flex flex-col " + (p.highlight ? "border-primary shadow-xl md:scale-[1.03]" : "border-border")}>
+      {p.highlight && (
+        <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground">Most popular</Badge>
+      )}
+      <h3 className="font-semibold text-lg">{p.name}</h3>
+      <p className="text-xs text-muted-foreground mt-0.5">{p.blurb}</p>
+      <div className="mt-3 flex items-baseline gap-1">
+        <span className="text-4xl font-extrabold">{p.price}</span>
+        <span className="text-muted-foreground text-sm">{p.period}</span>
+      </div>
+      <Link href="/login">
+        <Button className="w-full mt-5" variant={p.highlight ? "default" : "outline"}>
+          {p.id === "free" ? "Get started free" : "Get started"}
+        </Button>
+      </Link>
+      <ul className="mt-5 space-y-2.5">
+        {shown.map((f) => (
+          <li key={f} className="flex items-start gap-2 text-sm">
+            <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
+            <span className="text-muted-foreground">{f}</span>
+          </li>
+        ))}
+      </ul>
+      {p.features.length > p.highlights.length && (
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="mt-4 inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+        >
+          {open ? "Show less" : `See all ${p.features.length} features`}
+          <ChevronDown className={"w-4 h-4 transition-transform " + (open ? "rotate-180" : "")} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function Home() {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
+  const [showCompare, setShowCompare] = useState(false);
   const primaryCta = user ? { href: "/dashboard", label: "Go to dashboard" } : { href: "/login", label: "Get started free" };
 
   return (
@@ -435,42 +477,19 @@ export default function Home() {
             <p className="mt-3 text-muted-foreground">Start free. Upgrade when you grow. Cancel anytime.</p>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 items-start">
-            {PLANS.map((p) => (
-              <div
-                key={p.id}
-                className={"rounded-2xl border p-6 bg-card relative " + (p.highlight ? "border-primary shadow-xl md:scale-[1.03]" : "border-border")}
-              >
-                {p.highlight && (
-                  <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground">Most popular</Badge>
-                )}
-                <h3 className="font-semibold text-lg">{p.name}</h3>
-                <p className="text-xs text-muted-foreground mt-0.5">{p.blurb}</p>
-                <div className="mt-3 flex items-baseline gap-1">
-                  <span className="text-4xl font-extrabold">{p.price}</span>
-                  <span className="text-muted-foreground text-sm">{p.period}</span>
-                </div>
-                <ul className="mt-6 space-y-2.5">
-                  {p.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-sm">
-                      <Check className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-                      <span className="text-muted-foreground">{f}</span>
-                    </li>
-                  ))}
-                </ul>
-                <Link href="/login">
-                  <Button className="w-full mt-6" variant={p.highlight ? "default" : "outline"}>
-                    {p.id === "free" ? "Get started free" : "Get started"}
-                  </Button>
-                </Link>
-              </div>
-            ))}
+            {PLANS.map((p) => <PlanCard key={p.id} p={p} />)}
           </div>
 
-          {/* Feature comparison table */}
-          <div className="mt-14">
-            <h3 className="text-center text-xl sm:text-2xl font-bold tracking-tight">Compare all features</h3>
-            <p className="text-center text-sm text-muted-foreground mt-2">Everything included in each plan, side by side.</p>
-            <div className="mt-6 overflow-x-auto rounded-2xl border border-border bg-card">
+          {/* Feature comparison table (collapsible) */}
+          <div className="mt-12 text-center">
+            <Button variant="outline" className="gap-2" onClick={() => setShowCompare((s) => !s)}>
+              {showCompare ? "Hide full comparison" : "See all features & compare plans"}
+              <ChevronDown className={"w-4 h-4 transition-transform " + (showCompare ? "rotate-180" : "")} />
+            </Button>
+          </div>
+          {showCompare && (
+          <div className="mt-8">
+            <div className="overflow-x-auto rounded-2xl border border-border bg-card">
               <table className="w-full min-w-[720px] text-sm">
                 <thead>
                   <tr className="border-b border-border">
@@ -504,6 +523,7 @@ export default function Home() {
               Human (live agent) conversations are unlimited on every plan — only AI replies count toward your monthly limit.
             </p>
           </div>
+          )}
         </div>
       </section>
 
