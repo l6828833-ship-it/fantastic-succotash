@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bot, Loader2, MailCheck, ArrowLeft } from "lucide-react";
+import { Bot, Loader2, MailCheck, ArrowLeft, KeyRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
-type Mode = "login" | "signup";
+type Mode = "login" | "signup" | "reset";
 type Step = "form" | "verify";
 
 export default function Login() {
@@ -16,6 +16,7 @@ export default function Login() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -34,10 +35,32 @@ export default function Login() {
     setMode(m);
     setStep("form");
     setCode("");
+    setPassword("");
+    setConfirm("");
   };
 
-  // Login, or sign-up step 1 (request a code / create account).
+  // Login, sign-up step 1, or reset step 1 (request a code).
   const submit = async () => {
+    // Reset flow only needs an email to request a code.
+    if (mode === "reset") {
+      if (!email.trim()) {
+        toast.error("Enter your email");
+        return;
+      }
+      setLoading(true);
+      try {
+        const { ok, data } = await post("/api/auth/reset/request", { email: email.trim() });
+        if (!ok) { toast.error(data.error || "Something went wrong"); return; }
+        setStep("verify");
+        toast.success("If an account exists, we emailed you a reset code.");
+      } catch {
+        toast.error("Could not reach the server. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (!email.trim() || !password) {
       toast.error("Enter your email and password");
       return;
@@ -68,12 +91,35 @@ export default function Login() {
     }
   };
 
-  // Sign-up step 2: verify the emailed code.
+  // Step 2: verify the emailed code (sign-up = create account, reset = set new password).
   const verify = async () => {
     if (!/^\d{4,8}$/.test(code.trim())) {
       toast.error("Enter the code we emailed you");
       return;
     }
+    if (mode === "reset") {
+      if (password.length < 8) {
+        toast.error("Password must be at least 8 characters");
+        return;
+      }
+      if (password !== confirm) {
+        toast.error("Passwords don't match");
+        return;
+      }
+      setLoading(true);
+      try {
+        const { ok, data } = await post("/api/auth/reset/verify", { email: email.trim(), code: code.trim(), password });
+        if (!ok) { toast.error(data.error || "Invalid code"); return; }
+        toast.success("Password updated. Signing you in…");
+        window.location.href = "/dashboard";
+      } catch {
+        toast.error("Could not reach the server. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     setLoading(true);
     try {
       const { ok, data } = await post("/api/auth/signup/verify", { email: email.trim(), code: code.trim() });
@@ -89,7 +135,12 @@ export default function Login() {
   const resend = async () => {
     setLoading(true);
     try {
-      const { ok, data } = await post("/api/auth/signup/request", { email: email.trim(), password, name: name.trim() });
+      const url = mode === "reset" ? "/api/auth/reset/request" : "/api/auth/signup/request";
+      const payload =
+        mode === "reset"
+          ? { email: email.trim() }
+          : { email: email.trim(), password, name: name.trim() };
+      const { ok, data } = await post(url, payload);
       if (!ok) { toast.error(data.error || "Could not resend the code"); return; }
       toast.success("A new code is on its way.");
     } catch {
@@ -99,19 +150,30 @@ export default function Login() {
     }
   };
 
+  const headerSubtitle = () => {
+    if (step === "verify") {
+      return mode === "reset"
+        ? "Enter the code and choose a new password"
+        : "Enter the code we sent to your email";
+    }
+    if (mode === "login") return "Sign in to your account";
+    if (mode === "signup") return "Create your account to get started";
+    return "Reset your password";
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center gap-2 text-center">
           <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-            {step === "verify" ? <MailCheck className="w-6 h-6 text-primary" /> : <Bot className="w-6 h-6 text-primary" />}
+            {step === "verify"
+              ? <MailCheck className="w-6 h-6 text-primary" />
+              : mode === "reset"
+                ? <KeyRound className="w-6 h-6 text-primary" />
+                : <Bot className="w-6 h-6 text-primary" />}
           </div>
           <h1 className="text-xl font-bold text-foreground">Welcome to Chatrico</h1>
-          <p className="text-sm text-muted-foreground">
-            {step === "verify"
-              ? "Enter the code we sent to your email"
-              : mode === "login" ? "Sign in to your account" : "Create your account to get started"}
-          </p>
+          <p className="text-sm text-muted-foreground">{headerSubtitle()}</p>
         </div>
 
         <Card className="border-border">
@@ -127,13 +189,38 @@ export default function Login() {
                     onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                     placeholder="123456"
                     className="text-center text-lg tracking-[0.4em] font-semibold"
-                    onKeyDown={(e) => { if (e.key === "Enter") verify(); }}
+                    onKeyDown={(e) => { if (e.key === "Enter" && mode !== "reset") verify(); }}
                   />
                   <p className="text-xs text-muted-foreground">Sent to {email}</p>
                 </div>
+
+                {mode === "reset" && (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm">New password</Label>
+                      <Input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="At least 8 characters"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-sm">Confirm password</Label>
+                      <Input
+                        type="password"
+                        value={confirm}
+                        onChange={(e) => setConfirm(e.target.value)}
+                        placeholder="Re-enter your password"
+                        onKeyDown={(e) => { if (e.key === "Enter") verify(); }}
+                      />
+                    </div>
+                  </>
+                )}
+
                 <Button className="w-full gap-2" onClick={verify} disabled={loading}>
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Verify & create account
+                  {mode === "reset" ? "Reset password" : "Verify & create account"}
                 </Button>
                 <div className="flex items-center justify-between text-xs">
                   <button type="button" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1" onClick={() => { setStep("form"); setCode(""); }}>
@@ -143,6 +230,32 @@ export default function Login() {
                     Resend code
                   </button>
                 </div>
+              </div>
+            ) : mode === "reset" ? (
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label className="text-sm">Email</Label>
+                  <Input
+                    type="email"
+                    autoFocus
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="you@example.com"
+                    onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+                  />
+                  <p className="text-xs text-muted-foreground">We'll email you a code to reset your password.</p>
+                </div>
+                <Button className="w-full gap-2" onClick={submit} disabled={loading}>
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Send reset code
+                </Button>
+                <button
+                  type="button"
+                  className="w-full text-xs text-muted-foreground hover:text-foreground inline-flex items-center justify-center gap-1"
+                  onClick={() => switchMode("login")}
+                >
+                  <ArrowLeft className="w-3 h-3" /> Back to sign in
+                </button>
               </div>
             ) : (
               <>
@@ -165,7 +278,18 @@ export default function Login() {
                     <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-sm">Password</Label>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-sm">Password</Label>
+                      {mode === "login" && (
+                        <button
+                          type="button"
+                          className="text-xs text-primary hover:underline"
+                          onClick={() => switchMode("reset")}
+                        >
+                          Forgot password?
+                        </button>
+                      )}
+                    </div>
                     <Input
                       type="password"
                       value={password}
