@@ -282,6 +282,12 @@ ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "launcherIconUrl" text;
 ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "brandLogoUrl" text;
 ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "customCss" text;
 ALTER TABLE "campaigns" ADD COLUMN IF NOT EXISTS "subject" varchar(512);
+-- Per-workspace email branding (reply-to + branded transactional emails).
+ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "emailBrandName" varchar(255);
+ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "emailLogoUrl" text;
+ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "emailBrandColor" varchar(32);
+ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "supportEmail" varchar(320);
+ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "emailSignature" text;
 
 -- One-time codes for email verification (sign-up OTP) and password reset.
 CREATE TABLE IF NOT EXISTS "auth_otps" (

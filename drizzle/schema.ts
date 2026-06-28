@@ -58,6 +58,14 @@ export const workspaces = pgTable("workspaces", {
   companySize: varchar("companySize", { length: 64 }),
   features: jsonb("features").$type<string[]>(),
   plan: varchar("plan", { length: 64 }).default("starter"),
+  // Per-workspace email branding (applied to transactional emails like ticket
+  // confirmations). supportEmail is used as the Reply-To so customer replies
+  // reach the workspace, not the platform's sending address.
+  emailBrandName: varchar("emailBrandName", { length: 255 }),
+  emailLogoUrl: text("emailLogoUrl"),
+  emailBrandColor: varchar("emailBrandColor", { length: 32 }),
+  supportEmail: varchar("supportEmail", { length: 320 }),
+  emailSignature: text("emailSignature"),
   onboardingCompleted: boolean("onboardingCompleted").default(false),
   onboardingStep: integer("onboardingStep").default(1),
   createdAt: ts("createdAt").defaultNow().notNull(),
