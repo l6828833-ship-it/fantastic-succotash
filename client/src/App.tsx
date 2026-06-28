@@ -7,6 +7,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
+import Home from "./pages/Home";
 import Agents from "./pages/Agents";
 import AgentEdit from "./pages/AgentEdit";
 import Playground from "./pages/Playground";
@@ -68,19 +69,35 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+// The index route: logged-out visitors see the public landing page (instead of
+// being bounced to login), while authenticated users get their dashboard.
+function HomeOrDashboard() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-6 h-6 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) return <Home />;
+
+  return (
+    <OnboardingGate>
+      <AppLayout>
+        <Dashboard />
+      </AppLayout>
+    </OnboardingGate>
+  );
+}
+
 function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
-      <Route path="/" component={() => (
-        <AuthGate>
-          <OnboardingGate>
-            <AppLayout>
-              <Dashboard />
-            </AppLayout>
-          </OnboardingGate>
-        </AuthGate>
-      )} />
+      <Route path="/" component={HomeOrDashboard} />
       <Route path="/onboarding" component={() => (
         <AuthGate>
           <Onboarding />
