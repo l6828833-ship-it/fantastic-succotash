@@ -138,7 +138,7 @@ export default function Home() {
               </Button>
             )}
             {user ? (
-              <Link href="/"><Button size="sm">Dashboard</Button></Link>
+              <Link href="/dashboard"><Button size="sm">Dashboard</Button></Link>
             ) : (
               <>
                 <Link href="/login"><Button variant="ghost" size="sm" className="hidden sm:inline-flex">Sign in</Button></Link>
