@@ -179,9 +179,9 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex bg-background text-foreground">
+    <div className="min-h-screen grid grid-cols-1 lg:grid-cols-2 lg:grid-rows-1 bg-background text-foreground">
       {/* ── Left: brand / content panel (hidden on small screens) ── */}
-      <aside className="relative hidden lg:flex w-1/2 flex-col justify-between overflow-hidden bg-sidebar text-sidebar-foreground p-12">
+      <aside className="relative hidden lg:flex flex-col justify-between overflow-hidden bg-sidebar text-sidebar-foreground p-12">
         <div className="absolute -top-24 -left-24 w-[420px] h-[420px] rounded-full bg-primary/30 blur-3xl" />
         <div className="absolute bottom-0 -right-24 w-[360px] h-[360px] rounded-full bg-primary/20 blur-3xl" />
 
@@ -229,7 +229,7 @@ export default function Login() {
       </aside>
 
       {/* ── Right: auth area ── */}
-      <main className="flex-1 flex flex-col">
+      <main className="flex flex-col min-h-screen lg:min-h-0">
         {/* Top menu */}
         <header className="flex items-center justify-between px-5 sm:px-8 h-16 border-b border-border">
           <Link href="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
