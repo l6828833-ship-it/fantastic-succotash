@@ -194,7 +194,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
             <MessageSquare className="w-4 h-4 text-white" />
           </div>
           <div>
-            <p className="text-sm font-bold text-sidebar-foreground leading-none">ChatBot Pro</p>
+            <p className="text-sm font-bold text-sidebar-foreground leading-none">Chatrico</p>
             <p className="text-xs text-sidebar-foreground/40 mt-0.5">AI Platform</p>
           </div>
         </div>
@@ -317,7 +317,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center">
               <MessageSquare className="w-3 h-3 text-white" />
             </div>
-            <span className="font-semibold text-sm">ChatBot Pro</span>
+            <span className="font-semibold text-sm">Chatrico</span>
           </div>
         </div>
 
