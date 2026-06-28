@@ -3,7 +3,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { useState, useEffect } from "react";
 import {
   Building2, Bell, Puzzle, CreditCard, User, Save, Check, Globe, Users, Mail,
-  Zap, Shield, ChevronRight, ChevronDown, Lock, AlertCircle, CheckCircle2, ExternalLink, Plus, Trash2, UserPlus, Bitcoin, Loader2,
+  Zap, Shield, ChevronRight, ChevronDown, Lock, AlertCircle, CheckCircle2, ExternalLink, Plus, Trash2, UserPlus, Bitcoin, Loader2, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -791,18 +791,22 @@ export default function Settings() {
                 {currentPlan !== "free" && (
                   <div className="mt-4 pt-4 border-t border-border">
                     {workspace?.subscriptionCancelAtPeriodEnd ? (
-                      <p className="text-xs text-muted-foreground">
-                        Your plan is set to cancel at the end of the current billing period — you'll move to Free after that. No further charges.
-                      </p>
+                      <div className="rounded-lg border border-amber-200 bg-amber-500/10 p-3">
+                        <p className="text-xs text-amber-700 dark:text-amber-500">
+                          ✓ Your subscription is cancelled — it <strong>won't renew next month</strong>. You keep your {planInfo.name} plan until the end of the current billing period, then move to Free. No further charges.
+                        </p>
+                      </div>
                     ) : workspace?.stripeSubscriptionId ? (
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-xs text-muted-foreground">Renews automatically each month.</p>
-                        <Button size="sm" variant="outline" className="h-8 text-xs text-destructive hover:text-destructive" onClick={() => setConfirmCancel(true)}>
-                          Cancel subscription
+                      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 space-y-2">
+                        <p className="text-xs text-muted-foreground">
+                          Your {planInfo.name} plan renews automatically each month. Cancelling stops the next renewal — you keep access until the end of your current billing period and <strong>won't be charged again</strong>.
+                        </p>
+                        <Button size="sm" variant="destructive" className="h-8 text-xs gap-1.5" onClick={() => setConfirmCancel(true)}>
+                          <X className="w-3.5 h-3.5" /> Cancel subscription
                         </Button>
                       </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground">This plan doesn't auto-renew.</p>
+                      <p className="text-xs text-muted-foreground">This plan doesn't auto-renew, so there's nothing to cancel.</p>
                     )}
                   </div>
                 )}

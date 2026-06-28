@@ -21,6 +21,7 @@ import Affiliate from "./pages/Affiliate";
 import Admin from "./pages/Admin";
 import Login from "./pages/Login";
 import AcceptInvite from "./pages/AcceptInvite";
+import { Terms, Privacy, Refund } from "./pages/Legal";
 import TicketPortal from "./pages/TicketPortal";
 import Settings from "./pages/Settings";
 import AppLayout from "./components/AppLayout";
@@ -174,6 +175,9 @@ function Router() {
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/accept-invite" component={AcceptInvite} />
+      <Route path="/terms" component={Terms} />
+      <Route path="/privacy" component={Privacy} />
+      <Route path="/refund" component={Refund} />
       <Route path="/ticket/:id" component={({ params }) => <TicketPortal ticketId={params.id} />} />
       <Route path="/" component={Home} />
       <Route path="/dashboard" component={DashboardPage} />

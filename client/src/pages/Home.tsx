@@ -601,7 +601,11 @@ export default function Home() {
         <div className="border-t border-border">
           <div className="max-w-6xl mx-auto px-4 sm:px-6 py-5 text-xs text-muted-foreground flex flex-col sm:flex-row items-center justify-between gap-2">
             <span>© {new Date().getFullYear()} {BRAND}. All rights reserved.</span>
-            <span>Built for teams who care about their customers.</span>
+            <div className="flex items-center gap-4">
+              <Link href="/terms" className="hover:text-foreground transition-colors">Terms</Link>
+              <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
+              <Link href="/refund" className="hover:text-foreground transition-colors">Refund</Link>
+            </div>
           </div>
         </div>
       </footer>
