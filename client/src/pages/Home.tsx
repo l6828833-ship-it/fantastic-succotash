@@ -333,6 +333,65 @@ export default function Home() {
         </div>
       </section>
 
+      {/* ── Pricing ── */}
+      <section id="pricing" className="bg-muted/30 border-y border-border">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-20">
+          <div className="text-center max-w-2xl mx-auto mb-12">
+            <Badge variant="outline" className="mb-4 text-primary border-primary/30 bg-primary/5">Pricing</Badge>
+            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">Simple, scalable pricing</h2>
+            <p className="mt-3 text-muted-foreground">Start free. Upgrade when you grow. Cancel anytime.</p>
+          </div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 items-start">
+            {PLANS.map((p) => <PlanCard key={p.id} p={p} />)}
+          </div>
+
+          {/* Feature comparison table (collapsible) */}
+          <div className="mt-12 text-center">
+            <Button variant="outline" className="gap-2" onClick={() => setShowCompare((s) => !s)}>
+              {showCompare ? "Hide full comparison" : "See all features & compare plans"}
+              <ChevronDown className={"w-4 h-4 transition-transform " + (showCompare ? "rotate-180" : "")} />
+            </Button>
+          </div>
+          {showCompare && (
+          <div className="mt-8">
+            <div className="overflow-x-auto rounded-2xl border border-border bg-card">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left font-semibold p-4 sticky left-0 bg-card">Feature</th>
+                    {COMPARE_COLS.map((c) => (
+                      <th key={c} className={"text-center font-semibold p-4 " + (c === "Pro" ? "text-primary" : "")}>{c}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {COMPARE_ROWS.map((row, i) => (
+                    <tr key={row.label} className={"border-b border-border/60 " + (i % 2 ? "bg-muted/20" : "")}>
+                      <td className="p-4 text-foreground sticky left-0 bg-inherit">{row.label}</td>
+                      {row.values.map((v, idx) => (
+                        <td key={idx} className="p-4 text-center">
+                          {v === "✓" ? (
+                            <Check className="w-4 h-4 text-green-500 mx-auto" />
+                          ) : v === "—" ? (
+                            <span className="text-muted-foreground/50">—</span>
+                          ) : (
+                            <span className={COMPARE_COLS[idx] === "Pro" ? "font-medium text-foreground" : "text-muted-foreground"}>{v}</span>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-center text-xs text-muted-foreground mt-4">
+              Human (live agent) conversations are unlimited on every plan — only AI replies count toward your monthly limit.
+            </p>
+          </div>
+          )}
+        </div>
+      </section>
+
       {/* ── Features ── */}
       <section id="features" className="max-w-6xl mx-auto px-4 sm:px-6 py-20">
         <div className="text-center max-w-2xl mx-auto mb-12">
@@ -465,65 +524,6 @@ export default function Home() {
               </div>
             </div>
           ))}
-        </div>
-      </section>
-
-      {/* ── Pricing ── */}
-      <section id="pricing" className="bg-muted/30 border-y border-border">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-20">
-          <div className="text-center max-w-2xl mx-auto mb-12">
-            <Badge variant="outline" className="mb-4 text-primary border-primary/30 bg-primary/5">Pricing</Badge>
-            <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">Simple, scalable pricing</h2>
-            <p className="mt-3 text-muted-foreground">Start free. Upgrade when you grow. Cancel anytime.</p>
-          </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 items-start">
-            {PLANS.map((p) => <PlanCard key={p.id} p={p} />)}
-          </div>
-
-          {/* Feature comparison table (collapsible) */}
-          <div className="mt-12 text-center">
-            <Button variant="outline" className="gap-2" onClick={() => setShowCompare((s) => !s)}>
-              {showCompare ? "Hide full comparison" : "See all features & compare plans"}
-              <ChevronDown className={"w-4 h-4 transition-transform " + (showCompare ? "rotate-180" : "")} />
-            </Button>
-          </div>
-          {showCompare && (
-          <div className="mt-8">
-            <div className="overflow-x-auto rounded-2xl border border-border bg-card">
-              <table className="w-full min-w-[720px] text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left font-semibold p-4 sticky left-0 bg-card">Feature</th>
-                    {COMPARE_COLS.map((c) => (
-                      <th key={c} className={"text-center font-semibold p-4 " + (c === "Pro" ? "text-primary" : "")}>{c}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {COMPARE_ROWS.map((row, i) => (
-                    <tr key={row.label} className={"border-b border-border/60 " + (i % 2 ? "bg-muted/20" : "")}>
-                      <td className="p-4 text-foreground sticky left-0 bg-inherit">{row.label}</td>
-                      {row.values.map((v, idx) => (
-                        <td key={idx} className="p-4 text-center">
-                          {v === "✓" ? (
-                            <Check className="w-4 h-4 text-green-500 mx-auto" />
-                          ) : v === "—" ? (
-                            <span className="text-muted-foreground/50">—</span>
-                          ) : (
-                            <span className={COMPARE_COLS[idx] === "Pro" ? "font-medium text-foreground" : "text-muted-foreground"}>{v}</span>
-                          )}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <p className="text-center text-xs text-muted-foreground mt-4">
-              Human (live agent) conversations are unlimited on every plan — only AI replies count toward your monthly limit.
-            </p>
-          </div>
-          )}
         </div>
       </section>
 

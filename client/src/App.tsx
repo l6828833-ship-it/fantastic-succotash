@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import { useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -78,6 +78,48 @@ function injectCustomCode(html: string, target: HTMLElement, marker: string) {
     }
     target.appendChild(el);
   });
+}
+
+// Embed the Chatrico chat widget, but only on the public Home and Login pages
+// (never inside the authenticated dashboard). The widget script is loaded once
+// the first time one of those pages is shown, then hidden via CSS elsewhere.
+const CHAT_WIDGET_PATHS = ["/", "/login"];
+function ChatWidget() {
+  const [location] = useLocation();
+  const show = CHAT_WIDGET_PATHS.includes(location);
+
+  useEffect(() => {
+    if (!show) return;
+    // Config must be set before the embed script loads.
+    (window as unknown as { ChatBotProConfig?: unknown }).ChatBotProConfig = {
+      agentId: "12",
+      apiBase: "https://chatrico.com/api",
+    };
+    if (!document.getElementById("chatrico-embed")) {
+      const s = document.createElement("script");
+      s.id = "chatrico-embed";
+      s.src = "https://chatrico.com/widget/embed.js";
+      s.async = true;
+      s.defer = true;
+      document.body.appendChild(s);
+    }
+  }, [show]);
+
+  // Toggle widget visibility on SPA route changes (hide on dashboard, etc.).
+  useEffect(() => {
+    const styleId = "chatrico-hide";
+    const existing = document.getElementById(styleId);
+    if (show) {
+      existing?.remove();
+    } else if (!existing) {
+      const style = document.createElement("style");
+      style.id = styleId;
+      style.textContent = ".cbp-launcher,.cbp-panel{display:none !important;}";
+      document.head.appendChild(style);
+    }
+  }, [show]);
+
+  return null;
 }
 
 function CustomCodeInjector() {
@@ -274,6 +316,7 @@ function App() {
         <TooltipProvider>
           <Toaster richColors position="top-right" />
           <CustomCodeInjector />
+          <ChatWidget />
           <UpgradeProvider>
             <Router />
           </UpgradeProvider>
