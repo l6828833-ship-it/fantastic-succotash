@@ -9,6 +9,7 @@ import { invokeLLM, type Message as LLMMessage } from "./_core/llm";
 import { ENV } from "./_core/env";
 import {
   brandedEmail,
+  escapeHtml,
   getWorkspaceEmailBranding,
   isEmailConfigured,
   sendBulkEmails,
@@ -23,6 +24,53 @@ import {
 import { storagePut } from "./storage";
 import { creditReferralForUpgrade } from "./_core/referral";
 import * as db from "./db";
+
+// Email a customer when a human agent replies to their conversation/ticket from
+// the dashboard. Only fires for ticket-linked conversations with a known
+// customer email, and includes the reply-by-link portal so they can respond.
+// Best-effort: never throws.
+async function emailCustomerReply(conversationId: number, content: string, baseUrl: string): Promise<void> {
+  try {
+    if (!isEmailConfigured()) return;
+    const conv = await db.getConversationById(conversationId);
+    if (!conv) return;
+    const ticket = await db.getTicketByConversation(conversationId);
+    let email = conv.visitorEmail ?? null;
+    let name = conv.visitorName ?? null;
+    if (ticket?.contactId) {
+      const c = await db.getContactById(ticket.contactId);
+      if (c?.email) { email = c.email; name = c.name ?? name; }
+    }
+    // Only email ticket-linked conversations (avoid spamming live web chats).
+    if (!ticket || !email) return;
+
+    const { brand, replyTo: wsReplyTo } = await getWorkspaceEmailBranding(conv.workspaceId);
+    const ticketReply = ticketReplyAddress(ticket.id);
+    const replyTo = ticketReply || wsReplyTo;
+    const portalUrl = ticketPortalUrl(baseUrl, ticket.id);
+    const btnColor = /^#[0-9a-fA-F]{3,8}$/.test(brand.color || "") ? (brand.color as string) : "#6366f1";
+    const portalBtn = portalUrl
+      ? `<p style="margin:18px 0 4px;"><a href="${portalUrl}" style="background:${btnColor};color:#ffffff;padding:11px 18px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">View &amp; reply</a></p>`
+      : "";
+    const replyLine = ticketReply
+      ? `<p style="color:#6b7280;">You can also reply directly to this email.</p>`
+      : "";
+    const safe = escapeHtml(content).replace(/\n/g, "<br>");
+    await sendEmail({
+      to: email,
+      replyTo,
+      subject: `Re: ${ticket.title}`,
+      html: brandedEmail({
+        title: "You have a new reply",
+        bodyHtml: `<p>Hi ${name || "there"},</p><p>${safe}</p>${portalBtn}${replyLine}`,
+        brand,
+      }),
+      text: `Hi ${name || "there"},\n\n${content}${portalUrl ? `\n\nView & reply: ${portalUrl}` : ""}`,
+    });
+  } catch (e) {
+    console.error("[Inbox] customer reply email failed", e);
+  }
+}
 
 // ─── Workspace Router ─────────────────────────────────────────────────────────
 const workspaceRouter = router({
@@ -375,8 +423,13 @@ const inboxRouter = router({
       attachmentType: z.string().optional(),
       attachmentName: z.string().optional(),
     }))
-    .mutation(async ({ input }) => {
-      return db.createMessage(input);
+    .mutation(async ({ ctx, input }) => {
+      const msg = await db.createMessage(input);
+      // Email the customer when a human agent posts a public reply.
+      if (input.role === "agent" && !input.isInternal) {
+        await emailCustomerReply(input.conversationId, input.content, requestBaseUrl(ctx.req));
+      }
+      return msg;
     }),
   suggestReply: protectedProcedure
     .input(z.object({
