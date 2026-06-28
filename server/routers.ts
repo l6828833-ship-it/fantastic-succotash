@@ -13,7 +13,9 @@ import {
   isEmailConfigured,
   sendBulkEmails,
   sendEmail,
+  ticketPortalUrl,
   ticketReplyAddress,
+  requestBaseUrl,
   personalize,
   renderCampaignHtml,
   unsubscribeUrl,
@@ -489,8 +491,13 @@ const ticketsRouter = router({
           const { brand, replyTo: wsReplyTo } = await getWorkspaceEmailBranding(workspace.id);
           const ticketReply = ticket?.id ? ticketReplyAddress(ticket.id) : null;
           const replyTo = ticketReply || wsReplyTo;
+          const portalUrl = ticket?.id ? ticketPortalUrl(requestBaseUrl(ctx.req), ticket.id) : null;
+          const btnColor = /^#[0-9a-fA-F]{3,8}$/.test(brand.color || "") ? (brand.color as string) : "#6366f1";
+          const portalBtn = portalUrl
+            ? `<p style="margin:18px 0 4px;"><a href="${portalUrl}" style="background:${btnColor};color:#ffffff;padding:11px 18px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">View &amp; reply to your ticket</a></p>`
+            : "";
           const replyLine = ticketReply
-            ? `<p style="color:#6b7280;">You can reply directly to this email — your message will be added to this ticket.</p>`
+            ? `<p style="color:#6b7280;">Or reply directly to this email — your message will be added to this ticket.</p>`
             : "";
           await sendEmail({
             to: contact.email,
@@ -503,10 +510,10 @@ const ticketsRouter = router({
                 `<p>Thanks for reaching out. We've created a support ticket for you and our team will get back to you soon.</p>` +
                 `<p style="color:#6b7280;"><strong>Subject:</strong> ${input.title}</p>` +
                 (input.description ? `<p style="color:#6b7280;"><strong>Details:</strong> ${input.description}</p>` : "") +
-                replyLine,
+                portalBtn + replyLine,
               brand,
             }),
-            text: `Hi ${who},\n\nThanks for reaching out. We've created a support ticket ("${input.title}") and our team will get back to you soon.${ticketReply ? "\n\nYou can reply directly to this email to add to your ticket." : ""}`,
+            text: `Hi ${who},\n\nThanks for reaching out. We've created a support ticket ("${input.title}") and our team will get back to you soon.${portalUrl ? `\n\nView & reply to your ticket: ${portalUrl}` : ""}`,
           });
         } catch (e) {
           console.error("[Tickets] confirmation email failed", e);

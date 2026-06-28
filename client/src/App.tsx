@@ -20,6 +20,7 @@ import EmbedCode from "./pages/EmbedCode";
 import Affiliate from "./pages/Affiliate";
 import Admin from "./pages/Admin";
 import Login from "./pages/Login";
+import TicketPortal from "./pages/TicketPortal";
 import Settings from "./pages/Settings";
 import AppLayout from "./components/AppLayout";
 import { useAuth } from "./_core/hooks/useAuth";
@@ -97,6 +98,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+      <Route path="/ticket/:id" component={({ params }) => <TicketPortal ticketId={params.id} />} />
       <Route path="/" component={HomeOrDashboard} />
       <Route path="/onboarding" component={() => (
         <AuthGate>
