@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { invokeLLM, type Message as LLMMessage } from "./llm";
 import { createCustomerTicket } from "./ticketing";
-import { requestBaseUrl, readableBrandColor } from "./email";
+import { requestBaseUrl, safeColor } from "./email";
 
 // The embeddable widget runs on third-party websites, so these routes must be
 // public (no auth) and CORS-enabled.
@@ -38,7 +38,7 @@ const WIDGET_JS = `(function(){
   };
 
   // Derived style values — (re)computed by applySettings().
-  var color, side, dark, panelW, bg, fg, sub, border, fontStack;
+  var color, side, dark, panelW, bg, fg, sub, border, fontStack, fgOn;
 
   var storeKey = "chatbotpro_conv_" + agentId;
   var leadStoreKey = "chatbotpro_lead_" + agentId;
@@ -113,28 +113,41 @@ const WIDGET_JS = `(function(){
     return ICONS[id];
   }
 
+  // Pick a readable text/icon color (#fff or near-black) for content placed on
+  // top of the brand color, so even light primary colors stay legible instead
+  // of rendering white-on-white. Keeps the dashboard color applied literally.
+  function contrastOn(hex){
+    var h = String(hex || "").replace("#", "");
+    if (h.length === 3) h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2);
+    if (h.length < 6) return "#ffffff";
+    var r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+    if (isNaN(r) || isNaN(g) || isNaN(b)) return "#ffffff";
+    var lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    return lum > 0.62 ? "#111827" : "#ffffff";
+  }
+
   function buildCss(){
     return ""
       + ".cbp-launcher{position:fixed;bottom:20px;" + side + ":20px;width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.25);z-index:2147483000;display:flex;align-items:center;justify-content:center;transition:transform .15s ease;}"
       + ".cbp-launcher:hover{transform:scale(1.06);}"
-      + ".cbp-launcher svg{width:26px;height:26px;fill:#fff;}"
+      + ".cbp-launcher svg{width:26px;height:26px;fill:" + fgOn + ";}"
       + ".cbp-launcher img{width:30px;height:30px;border-radius:8px;object-fit:cover;}"
       + ".cbp-panel{position:fixed;bottom:88px;" + side + ":20px;width:" + panelW + "px;max-width:calc(100vw - 40px);height:560px;max-height:calc(100vh - 120px);background:" + bg + ";color:" + fg + ";border:1px solid " + border + ";border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.28);z-index:2147483000;display:none;flex-direction:column;overflow:hidden;font-family:" + fontStack + ";}"
       + ".cbp-panel.cbp-open{display:flex;}"
-      + ".cbp-head{padding:14px 16px;color:#fff;display:flex;align-items:center;gap:10px;}"
+      + ".cbp-head{padding:14px 16px;color:" + fgOn + ";display:flex;align-items:center;gap:10px;}"
       + ".cbp-head .cbp-av{width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;overflow:hidden;}"
       + ".cbp-head .cbp-av img{width:100%;height:100%;object-fit:cover;}"
       + ".cbp-head .cbp-name{font-weight:600;font-size:15px;}"
-      + ".cbp-head .cbp-x{margin-left:auto;background:none;border:none;color:#fff;cursor:pointer;font-size:20px;line-height:1;opacity:.85;}"
+      + ".cbp-head .cbp-x{margin-left:auto;background:none;border:none;color:" + fgOn + ";cursor:pointer;font-size:20px;line-height:1;opacity:.85;}"
       + ".cbp-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:10px;background:" + (dark ? "#0b0b12" : "#fafafa") + ";}"
       + ".cbp-msg{max-width:80%;padding:9px 12px;border-radius:14px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word;}"
       + ".cbp-bot{align-self:flex-start;background:" + sub + ";color:" + fg + ";border-bottom-left-radius:4px;}"
-      + ".cbp-user{align-self:flex-end;color:#fff;border-bottom-right-radius:4px;}"
+      + ".cbp-user{align-self:flex-end;color:" + fgOn + ";border-bottom-right-radius:4px;}"
       + ".cbp-foot{border-top:1px solid " + border + ";padding:10px;display:flex;gap:8px;background:" + bg + ";}"
       + ".cbp-foot input{flex:1;border:1px solid " + border + ";background:" + bg + ";color:" + fg + ";border-radius:10px;padding:10px 12px;font-size:14px;outline:none;}"
-      + ".cbp-foot button{border:none;border-radius:50%;color:#fff;width:42px;height:42px;flex:0 0 auto;cursor:pointer;display:flex;align-items:center;justify-content:center;}"
+      + ".cbp-foot button{border:none;border-radius:50%;color:" + fgOn + ";width:42px;height:42px;flex:0 0 auto;cursor:pointer;display:flex;align-items:center;justify-content:center;}"
       + ".cbp-foot button:disabled{opacity:.5;cursor:default;}"
-      + ".cbp-foot button svg{width:18px;height:18px;fill:#fff;}"
+      + ".cbp-foot button svg{width:18px;height:18px;fill:" + fgOn + ";}"
       + ".cbp-typing{display:flex;gap:4px;padding:4px 2px;}"
       + ".cbp-typing span{width:7px;height:7px;border-radius:50%;background:#9ca3af;animation:cbpb 1s infinite;}"
       + ".cbp-typing span:nth-child(2){animation-delay:.15s;}.cbp-typing span:nth-child(3){animation-delay:.3s;}"
@@ -145,12 +158,12 @@ const WIDGET_JS = `(function(){
       + ".cbp-lead p{margin:0 0 2px;font-size:13px;color:" + (dark ? "#9ca3af" : "#6b7280") + ";}"
       + ".cbp-lead label{font-size:12px;font-weight:600;color:" + fg + ";display:block;margin-bottom:4px;}"
       + ".cbp-lead input{width:100%;box-sizing:border-box;border:1px solid " + border + ";background:" + bg + ";color:" + fg + ";border-radius:10px;padding:10px 12px;font-size:14px;outline:none;}"
-      + ".cbp-lead .cbp-start{border:none;border-radius:10px;color:#fff;padding:11px;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;}"
+      + ".cbp-lead .cbp-start{border:none;border-radius:10px;color:" + fgOn + ";padding:11px;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;}"
       + ".cbp-lead .cbp-start:disabled{opacity:.6;cursor:default;}"
       + ".cbp-lead .cbp-err{color:#ef4444;font-size:12px;min-height:14px;}"
-      + ".cbp-head .cbp-ticket{margin-left:auto;background:none;border:none;color:#fff;cursor:pointer;opacity:.85;display:flex;align-items:center;padding:0;}"
+      + ".cbp-head .cbp-ticket{margin-left:auto;background:none;border:none;color:" + fgOn + ";cursor:pointer;opacity:.85;display:flex;align-items:center;padding:0;}"
       + ".cbp-head .cbp-ticket:hover{opacity:1;}"
-      + ".cbp-head .cbp-ticket svg{width:18px;height:18px;fill:#fff;}"
+      + ".cbp-head .cbp-ticket svg{width:18px;height:18px;fill:" + fgOn + ";}"
       + ".cbp-lead textarea{width:100%;box-sizing:border-box;border:1px solid " + border + ";background:" + bg + ";color:" + fg + ";border-radius:10px;padding:10px 12px;font-size:14px;outline:none;resize:vertical;min-height:84px;font-family:inherit;}";
   }
 
@@ -159,6 +172,7 @@ const WIDGET_JS = `(function(){
   // returns the authoritative agent settings.
   function applySettings(){
     color = settings.color || "#6366f1";
+    fgOn = contrastOn(color);
     side = settings.position === "bottom-left" ? "left" : "right";
     dark = settings.theme === "dark";
     panelW = sizeMap[settings.size] || 372;
@@ -583,7 +597,10 @@ export function registerWidgetRoutes(app: Express) {  // The widget loader scrip
         id: agent.id,
         name: agent.name,
         welcomeMessage: agent.welcomeMessage ?? "Hi! How can I help you today?",
-        color: readableBrandColor(agent.widgetColor),
+        // Serve the agent's literal saved color so the dashboard color always
+        // applies on the widget. (We don't luminance-clamp it like emails do —
+        // the widget computes a readable icon/text color from it client-side.)
+        color: safeColor(agent.widgetColor) ?? "#6366f1",
         position: agent.widgetPosition ?? "bottom-right",
         size: agent.widgetSize ?? "standard",
         theme: agent.widgetTheme ?? "light",
