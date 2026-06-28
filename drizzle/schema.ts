@@ -58,6 +58,9 @@ export const workspaces = pgTable("workspaces", {
   companySize: varchar("companySize", { length: 64 }),
   features: jsonb("features").$type<string[]>(),
   plan: varchar("plan", { length: 64 }).default("starter"),
+  // Manual online/offline toggle for the human support team. When offline, the
+  // widget offers a ticket instead of promising a live human reply.
+  supportOnline: boolean("supportOnline").default(true),
   onboardingCompleted: boolean("onboardingCompleted").default(false),
   onboardingStep: integer("onboardingStep").default(1),
   createdAt: ts("createdAt").defaultNow().notNull(),
