@@ -1207,14 +1207,10 @@ export async function getPlatformStats() {
     const r = await db.select({ c: sql<number>`count(*)` }).from(table);
     return Number(r[0]?.c ?? 0);
   };
-  return {
-    users: await one(users),
-    workspaces: await one(workspaces),
-    agents: await one(agents),
-    conversations: await one(conversations),
-    tickets: await one(tickets),
-    contacts: await one(contacts),
-  };
+  const [u, w, a, c, t, ct] = await Promise.all([
+    one(users), one(workspaces), one(agents), one(conversations), one(tickets), one(contacts),
+  ]);
+  return { users: u, workspaces: w, agents: a, conversations: c, tickets: t, contacts: ct };
 }
 
 // Per-workspace usage counts for the admin usage view. Uses GROUP BY so it's a
