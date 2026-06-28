@@ -107,6 +107,7 @@ const agentRouter = router({
       fallbackMessage: z.string().optional().nullable(),
       welcomeMessage: z.string().optional().nullable(),
       handoffMode: z.enum(["ai_only", "ai_first_human_escalation", "human_only"]).optional(),
+      humanAvailability: z.enum(["auto", "online", "offline"]).optional(),
       escalationTriggers: z.array(z.string()).optional(),
       escalationMessage: z.string().optional().nullable(),
       workingHoursEnabled: z.boolean().optional(),

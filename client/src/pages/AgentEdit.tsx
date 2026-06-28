@@ -96,6 +96,7 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
   const [fallbackMessage, setFallbackMessage] = useState("");
   const [welcomeMessage, setWelcomeMessage] = useState("");
   const [handoffMode, setHandoffMode] = useState("ai_only");
+  const [humanAvailability, setHumanAvailability] = useState("auto");
   const [escalationTriggers, setEscalationTriggers] = useState<string[]>([]);
   const [escalationMessage, setEscalationMessage] = useState("");
   const [workingHoursEnabled, setWorkingHoursEnabled] = useState(false);
@@ -133,6 +134,7 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
       setFallbackMessage(agent.fallbackMessage ?? "");
       setWelcomeMessage(agent.welcomeMessage ?? "");
       setHandoffMode(agent.handoffMode ?? "ai_only");
+      setHumanAvailability(agent.humanAvailability ?? "auto");
       setEscalationTriggers((agent.escalationTriggers as string[]) ?? []);
       setEscalationMessage(agent.escalationMessage ?? "");
       setWorkingHoursEnabled(agent.workingHoursEnabled ?? false);
@@ -162,6 +164,7 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
       maxResponseLength: maxResponseLength as "short" | "medium" | "long",
       systemPrompt, fallbackMessage, welcomeMessage,
       handoffMode: handoffMode as "ai_only" | "ai_first_human_escalation" | "human_only",
+      humanAvailability: humanAvailability as "auto" | "online" | "offline",
       escalationTriggers, escalationMessage, workingHoursEnabled, offlineMessage, workingHours,
       leadCaptureEnabled, widgetColor,
       widgetPosition: widgetPosition as "bottom-right" | "bottom-left",
@@ -453,6 +456,37 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
                   </button>
                 );
               })}
+            </CardContent>
+          </Card>
+
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold">Human Availability</CardTitle>
+              <CardDescription className="text-xs">Control whether this agent's conversations can reach a live human, or fall back to a support ticket.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {[
+                { id: "auto", label: "Follow team status", desc: "Use the Inbox 'Team online / offline' toggle. When the team is online, conversations route to a human; when offline, visitors are offered a ticket." },
+                { id: "online", label: "Always online", desc: "Always route conversations that need a human to your Inbox." },
+                { id: "offline", label: "Always offline", desc: "Never route to a human for this agent — offer a support ticket instead." },
+              ].map((opt) => (
+                <button
+                  key={opt.id}
+                  onClick={() => setHumanAvailability(opt.id)}
+                  className={cn(
+                    "w-full flex items-start gap-3 p-3 rounded-lg border text-left transition-all",
+                    humanAvailability === opt.id ? "border-primary bg-primary/5" : "border-border hover:bg-accent/30",
+                  )}
+                >
+                  <div className={cn("w-4 h-4 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center", humanAvailability === opt.id ? "border-primary" : "border-muted-foreground")}>
+                    {humanAvailability === opt.id && <div className="w-2 h-2 rounded-full bg-primary" />}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{opt.label}</p>
+                    <p className="text-xs text-muted-foreground">{opt.desc}</p>
+                  </div>
+                </button>
+              ))}
             </CardContent>
           </Card>
 
