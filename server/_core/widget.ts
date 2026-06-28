@@ -456,13 +456,15 @@ const WIDGET_JS = `(function(){
       if (data && data.userMessageId) bumpSeen(data.userMessageId);
       if (data && data.messageId) bumpSeen(data.messageId);
       if (data && data.mode === "human"){
+        var notice = data.escalationMessage || null;
         if (data.humanAvailable === false){
           // No human online right now — offer a ticket instead of a false promise.
-          if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", data.offlineMessage || "Our team is offline right now. Leave a ticket and we'll reply by email."); }
+          if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", notice || data.offlineMessage || "Our team is offline right now. Leave a ticket and we'll reply by email."); }
           if (ticketMode !== "off"){ revealTicketButton(); }
         } else {
           // A human will answer from the Inbox; their reply arrives via polling.
-          if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", "You're connected to our team — someone will reply right here shortly."); }
+          if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", notice || "You're connected to our team — someone will reply right here shortly."); }
+          else if (notice){ addMsg("bot", notice); }
           // If no human replies within the wait window, offer a ticket.
           if (ticketMode === "ai_fallback"){ scheduleTicketOffer(); }
         }
@@ -521,8 +523,38 @@ const WIDGET_JS = `(function(){
   document.body.appendChild(panel);
 })();`;
 
-export function registerWidgetRoutes(app: Express) {
-  // The widget loader script.
+// Evaluate whether a visitor message should trigger escalation to a human, for
+// agents in "ai_first_human_escalation" mode. The trigger labels match the ones
+// shown in Agent Settings (AgentEdit ESCALATION_TRIGGERS).
+function shouldEscalate(message: string, userMessageCount: number, triggers: string[] | null | undefined): boolean {
+  if (!triggers || triggers.length === 0) return false;
+  const m = String(message || "").toLowerCase();
+  const has = (label: string) => triggers.includes(label);
+
+  if (has("Customer requests human agent") &&
+    /\b(human|real person|live (agent|person|chat)|speak (to|with) (a |an )?(human|person|someone|agent|representative)|talk (to|with) (a |an )?(human|person|someone|agent|representative)|customer (service|support)|representative|operator|agent)\b/.test(m)) {
+    return true;
+  }
+  if (has("Complaint or refund request") &&
+    /\b(refund|money back|charge ?back|reimburse|complaint|complain|cancel my (order|subscription|account))\b/.test(m)) {
+    return true;
+  }
+  if (has("Technical issue reported") &&
+    /\b(error|bug|broken|not working|doesn'?t work|won'?t work|crash|glitch|can'?t (log ?in|login|access|sign in))\b/.test(m)) {
+    return true;
+  }
+  if (has("Negative sentiment detected") &&
+    /\b(angry|furious|terrible|awful|worst|horrible|frustrat|disappointed|unacceptable|ridiculous|useless|scam)\b/.test(m)) {
+    return true;
+  }
+  if (has("Issue unresolved after 3 messages") && userMessageCount >= 3) {
+    return true;
+  }
+  // "High-value customer detected" has no signal available from the widget alone.
+  return false;
+}
+
+export function registerWidgetRoutes(app: Express) {  // The widget loader script.
   app.get("/widget/embed.js", (_req: Request, res: Response) => {
     setCors(res);
     res.type("application/javascript");
@@ -771,6 +803,34 @@ export function registerWidgetRoutes(app: Express) {
       const ws = await db.getWorkspaceById(agent.workspaceId);
       const humanAvailable = ws?.supportOnline !== false;
 
+      // AI-first then escalation: evaluate the configured triggers on this
+      // message. If one fires, mark the conversation escalated so it routes to a
+      // human (or to a ticket when the team is offline).
+      let escalationMessage: string | null = null;
+      if (conv && !conv.isEscalated && agent.handoffMode === "ai_first_human_escalation") {
+        const prior = await db.getMessagesByConversation(conversationId);
+        const userCount = prior.filter((x) => x.role === "user").length;
+        if (shouldEscalate(message, userCount, agent.escalationTriggers as string[] | null)) {
+          await db.updateConversation(conversationId, { isEscalated: true });
+          conv.isEscalated = true;
+          escalationMessage = agent.escalationMessage || "I'm connecting you with a member of our team who can help. Please hold on a moment.";
+          // Notify the workspace owner that a conversation was escalated.
+          try {
+            if (ws) {
+              await db.createNotification({
+                workspaceId: agent.workspaceId,
+                userId: ws.userId,
+                type: "escalation",
+                title: "Conversation escalated",
+                body: String(message).slice(0, 140),
+                relatedId: conversationId,
+                relatedType: "conversation",
+              });
+            }
+          } catch (e) { console.error("[Widget] escalation notify failed", e); }
+        }
+      }
+
       // When the conversation has been handed to a human (escalated, switched to
       // "human" handoff in the Inbox, or the agent is human-only), the AI must
       // NOT reply. A teammate answers from the Inbox and the widget receives it
@@ -785,6 +845,7 @@ export function registerWidgetRoutes(app: Express) {
           mode: "human",
           userMessageId,
           humanAvailable,
+          escalationMessage,
           offlineMessage: agent.offlineMessage ?? null,
         });
         return;
