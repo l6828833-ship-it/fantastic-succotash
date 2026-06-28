@@ -17,7 +17,11 @@ const PLAN_LABELS: Record<string, string> = {
 };
 
 export function isStripeConfigured(): boolean {
-  return !!ENV.stripeSecretKey;
+  const key = ENV.stripeSecretKey;
+  // A valid server-side key is a secret ("sk_") or restricted ("rk_") key.
+  // A publishable key ("pk_") cannot create checkout sessions, so treat it as
+  // not configured — this keeps the card option hidden until it's fixed.
+  return !!key && !key.startsWith("pk_");
 }
 
 export function isCryptomusConfigured(): boolean {
@@ -47,6 +51,15 @@ export async function createStripeCheckout(opts: {
 }): Promise<{ url: string; id: string }> {
   const amount = db.planPriceCents(opts.plan);
   if (!amount) throw new Error("Plan is not purchasable");
+
+  // Guard against the most common misconfiguration: a publishable key (pk_)
+  // placed in STRIPE_SECRET_KEY. Stripe rejects it server-side with a cryptic
+  // error, so fail early with an actionable message instead.
+  if (!ENV.stripeSecretKey || ENV.stripeSecretKey.startsWith("pk_")) {
+    throw new Error(
+      "Stripe is misconfigured: STRIPE_SECRET_KEY must be your secret key (starts with 'sk_'), not the publishable key (starts with 'pk_'). Get it at https://dashboard.stripe.com/apikeys.",
+    );
+  }
 
   const form = new URLSearchParams();
   form.set("mode", "subscription");
