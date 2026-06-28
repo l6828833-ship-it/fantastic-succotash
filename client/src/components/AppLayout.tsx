@@ -48,6 +48,7 @@ const navItems = [
   { href: "/knowledge", icon: BookOpen, label: "Knowledge Base" },
   { href: "/analytics", icon: BarChart3, label: "Analytics" },
   { href: "/embed", icon: Code2, label: "Embed Code" },
+  { href: "/affiliate", icon: Gift, label: "Affiliate" },
   { href: "/support", icon: LifeBuoy, label: "Help & Support" },
 ];
 
@@ -206,12 +207,6 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
               <Shield className="w-4 h-4" />
             </Link>
           )}
-          <Link href="/affiliate" title="Affiliate" onClick={onClose} className={cn(
-            "w-8 h-8 rounded-lg flex items-center justify-center transition-colors",
-            currentPath === "/affiliate" ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent",
-          )}>
-            <Gift className="w-4 h-4" />
-          </Link>
           <Link href="/settings" title="Settings" onClick={onClose} className={cn(
             "w-8 h-8 rounded-lg flex items-center justify-center transition-colors",
             currentPath === "/settings" ? "bg-sidebar-accent text-sidebar-foreground" : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent",
