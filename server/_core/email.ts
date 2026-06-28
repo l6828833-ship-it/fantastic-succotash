@@ -224,6 +224,128 @@ export function renderCampaignHtml(bodyText: string, unsubUrl: string): string {
 }
 
 
+// ─── Email-to-ticket (inbound reply threading) ───────────────────────────────
+// A per-ticket reply address encodes the ticket id + a signed token. Customers
+// reply to it and the inbound webhook threads the message back onto the ticket.
+export function ticketReplyToken(ticketId: number): string {
+  return crypto
+    .createHmac("sha256", ENV.cookieSecret || "chatrico-ticket")
+    .update(`ticket-reply:${ticketId}`)
+    .digest("hex")
+    .slice(0, 16);
+}
+
+// Returns the per-ticket reply address, or null when no inbound domain is set.
+export function ticketReplyAddress(ticketId: number): string | null {
+  const domain = ENV.inboundEmailDomain.trim().replace(/^@/, "");
+  if (!domain) return null;
+  return `ticket-${ticketId}-${ticketReplyToken(ticketId)}@${domain}`;
+}
+
+// Validate + decode a "ticket-<id>-<token>@domain" address.
+export function parseTicketReplyAddress(addr: string): { ticketId: number } | null {
+  const m = /ticket-(\d+)-([a-f0-9]{16})@/i.exec(addr || "");
+  if (!m) return null;
+  const ticketId = Number(m[1]);
+  if (!ticketId || ticketReplyToken(ticketId) !== m[2].toLowerCase()) return null;
+  return { ticketId };
+}
+
+// Strip quoted history/signatures from an inbound reply so only the new message
+// is stored. Best-effort: cuts at common reply separators and quoted lines.
+export function stripQuotedReply(raw: string): string {
+  if (!raw) return "";
+  const lines = String(raw).replace(/\r\n/g, "\n").split("\n");
+  const kept: string[] = [];
+  for (const line of lines) {
+    if (/^\s*On .+wrote:\s*$/.test(line)) break;
+    if (/^\s*-{2,}\s*Original Message\s*-{2,}/i.test(line)) break;
+    if (/^\s*_{5,}\s*$/.test(line)) break;
+    if (/^\s*>{1,}/.test(line)) break; // start of quoted block
+    if (/^\s*From:\s.+/.test(line) && kept.length > 0) break;
+    kept.push(line);
+  }
+  return kept.join("\n").trim().slice(0, 8000);
+}
+
+// Collect every recipient address from a tolerant set of inbound payload shapes
+// (Brevo Inbound uses To/Cc arrays of { Address }).
+function collectInboundAddresses(item: Record<string, unknown>): string[] {
+  const out: string[] = [];
+  const push = (v: unknown) => {
+    if (!v) return;
+    if (typeof v === "string") out.push(v);
+    else if (typeof v === "object") {
+      const o = v as Record<string, unknown>;
+      const a = o.Address ?? o.address ?? o.email ?? o.Email;
+      if (typeof a === "string") out.push(a);
+    }
+  };
+  for (const key of ["To", "to", "Cc", "cc", "recipient", "recipients", "Recipients"]) {
+    const val = item[key];
+    if (Array.isArray(val)) val.forEach(push);
+    else push(val);
+  }
+  return out;
+}
+
+function inboundBodyText(item: Record<string, unknown>): string {
+  const cand = item.RawTextBody ?? item.TextBody ?? item.text ?? item.ExtractedMarkdownMessage ?? item.Text ?? "";
+  return typeof cand === "string" ? cand : "";
+}
+
+// Thread a single inbound email item onto its ticket. Never throws.
+async function handleInboundEmailItem(item: Record<string, unknown>): Promise<boolean> {
+  try {
+    let parsed: { ticketId: number } | null = null;
+    for (const addr of collectInboundAddresses(item)) {
+      parsed = parseTicketReplyAddress(addr);
+      if (parsed) break;
+    }
+    if (!parsed) return false;
+
+    const ticket = await db.getTicketById(parsed.ticketId);
+    if (!ticket) return false;
+
+    const message = stripQuotedReply(inboundBodyText(item));
+    if (!message) return false;
+
+    // Ensure the ticket has a conversation thread, then append the reply.
+    let conversationId = ticket.conversationId ?? null;
+    if (!conversationId) {
+      const conv = await db.createConversation({
+        workspaceId: ticket.workspaceId,
+        channel: "email",
+        visitorId: `ticket_${ticket.id}`,
+      });
+      conversationId = conv?.id ?? null;
+      if (conversationId) await db.updateTicket(ticket.id, { conversationId });
+    }
+    if (conversationId) {
+      await db.createMessage({ conversationId, role: "user", content: message });
+    }
+
+    // Reopen a closed ticket and notify the workspace owner.
+    if (ticket.status === "closed") await db.updateTicket(ticket.id, { status: "open" });
+    const ws = await db.getWorkspaceById(ticket.workspaceId);
+    if (ws) {
+      await db.createNotification({
+        workspaceId: ticket.workspaceId,
+        userId: ws.userId,
+        type: "ticket_reply",
+        title: "Customer replied to a ticket",
+        body: `${ticket.title}: ${message.slice(0, 120)}`,
+        relatedId: ticket.id,
+        relatedType: "ticket",
+      });
+    }
+    return true;
+  } catch (e) {
+    console.error("[Inbound] item handling failed", e);
+    return false;
+  }
+}
+
 function unsubPage(title: string, message?: string): string {
   return [
     "<!doctype html><html><head><meta charset='utf-8'>",
@@ -238,6 +360,26 @@ function unsubPage(title: string, message?: string): string {
 }
 
 export function registerEmailRoutes(app: Express) {
+  // Inbound email webhook (email-to-ticket). Point your inbound provider's
+  // parse webhook (e.g. Brevo Inbound) at POST /api/inbound/email. We always
+  // answer 200 so the provider doesn't retry-storm on a single bad item.
+  app.post("/api/inbound/email", async (req: Request, res: Response) => {
+    try {
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const items = Array.isArray(body.items)
+        ? (body.items as Record<string, unknown>[])
+        : [body];
+      let threaded = 0;
+      for (const item of items) {
+        if (await handleInboundEmailItem(item)) threaded++;
+      }
+      res.json({ ok: true, threaded });
+    } catch (error) {
+      console.error("[Inbound] webhook failed", error);
+      res.json({ ok: true });
+    }
+  });
+
   // Public one-click unsubscribe target embedded in every campaign email.
   app.get("/api/unsubscribe", async (req: Request, res: Response) => {
     const w = Number(req.query.w);
