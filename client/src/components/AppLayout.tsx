@@ -20,6 +20,7 @@ import {
   Moon,
   Settings,
   Shield,
+  Sparkles,
   Sun,
   Ticket,
   Users,
@@ -258,6 +259,28 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
 
       {/* User footer */}
       <div className="px-3 pb-4 shrink-0 border-t border-sidebar-border pt-3">
+        {/* Plan promo: current plan + upgrade CTA */}
+        {(() => {
+          const plan = workspace?.plan === "growth" ? "pro" : (workspace?.plan ?? "free");
+          const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
+          const canUpgrade = !["business", "enterprise"].includes(plan);
+          return (
+            <Link href="/settings">
+              <div className="mb-3 rounded-lg border border-sidebar-border bg-sidebar-accent/40 p-3 cursor-pointer hover:bg-sidebar-accent transition-colors" onClick={onClose}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-sidebar-foreground/60">Current plan</span>
+                  <Badge className="text-[10px] bg-sidebar-primary text-sidebar-primary-foreground capitalize">{planLabel}</Badge>
+                </div>
+                {canUpgrade && (
+                  <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-sidebar-primary">
+                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                    Upgrade for more agents & features
+                  </div>
+                )}
+              </div>
+            </Link>
+          );
+        })()}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-sidebar-accent cursor-pointer transition-all">
