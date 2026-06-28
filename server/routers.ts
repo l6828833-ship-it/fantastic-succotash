@@ -8,8 +8,10 @@ import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_
 import { invokeLLM, type Message as LLMMessage } from "./_core/llm";
 import { ENV } from "./_core/env";
 import {
+  brandedEmail,
   isEmailConfigured,
   sendBulkEmails,
+  sendEmail,
   personalize,
   renderCampaignHtml,
   unsubscribeUrl,
@@ -110,6 +112,7 @@ const agentRouter = router({
       widgetTheme: z.enum(["light", "dark"]).optional(),
       widgetFont: z.string().optional(),
       ticketMode: z.enum(["off", "always", "ai_fallback"]).optional(),
+      ticketDelaySeconds: z.number().int().min(0).max(86400).optional(),
       launcherIconUrl: z.string().optional().nullable(),
       brandLogoUrl: z.string().optional().nullable(),
       customCss: z.string().optional().nullable(),
@@ -323,9 +326,20 @@ const inboxRouter = router({
           // lost, unless one already exists for it.
           const existingTicket = await db.getTicketByConversation(id);
           if (!existingTicket) {
+            // Link the customer/contact (by the conversation's visitor email) so
+            // the ticket shows who it's for.
+            let contactId: number | undefined;
+            const vEmail = conv?.visitorEmail?.trim();
+            if (vEmail) {
+              const existingContact = await db.findContactByEmail(workspace.id, vEmail);
+              contactId = existingContact
+                ? existingContact.id
+                : (await db.createContact({ workspaceId: workspace.id, name: conv?.visitorName ?? null, email: vEmail, channel: "web", lastSeenAt: new Date() }))?.id;
+            }
             await db.createTicket({
               workspaceId: workspace.id,
               conversationId: id,
+              contactId,
               title: `Escalated: ${conv?.visitorName ?? conv?.visitorEmail ?? `conversation #${id}`}`,
               description: "This conversation was escalated to a human agent.",
               status: "open",
@@ -457,6 +471,28 @@ const ticketsRouter = router({
         relatedId: ticket?.id,
         relatedType: "ticket",
       });
+
+      // Email the customer a branded confirmation (best-effort; never blocks).
+      if (contact?.email && isEmailConfigured()) {
+        try {
+          const who = contact.name || "there";
+          await sendEmail({
+            to: contact.email,
+            subject: `We received your request: ${input.title}`,
+            html: brandedEmail({
+              title: "We've got your request",
+              bodyHtml:
+                `<p>Hi ${who},</p>` +
+                `<p>Thanks for reaching out. We've created a support ticket for you and our team will get back to you soon.</p>` +
+                `<p style="color:#6b7280;"><strong>Subject:</strong> ${input.title}</p>` +
+                (input.description ? `<p style="color:#6b7280;"><strong>Details:</strong> ${input.description}</p>` : ""),
+            }),
+            text: `Hi ${who},\n\nThanks for reaching out. We've created a support ticket ("${input.title}") and our team will get back to you soon.`,
+          });
+        } catch (e) {
+          console.error("[Tickets] confirmation email failed", e);
+        }
+      }
       return ticket;
     }),
   update: protectedProcedure

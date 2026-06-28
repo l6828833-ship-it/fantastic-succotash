@@ -45,6 +45,8 @@ type TicketRow = {
   tags?: unknown;
   conversationId?: number | null;
   contactId?: number | null;
+  contactName?: string | null;
+  contactEmail?: string | null;
   workspaceId: number;
   createdAt: Date;
   updatedAt: Date;
@@ -339,6 +341,12 @@ export default function Tickets() {
                       <p className="text-sm font-medium text-foreground line-clamp-1 flex-1">{ticket.title}</p>
                       <span className="text-xs text-muted-foreground shrink-0">#{ticket.id}</span>
                     </div>
+                    {(ticket.contactName || ticket.contactEmail) && (
+                      <p className="text-xs text-muted-foreground line-clamp-1 mb-1 flex items-center gap-1">
+                        <User className="w-3 h-3 shrink-0" />
+                        {ticket.contactName ?? ticket.contactEmail}
+                      </p>
+                    )}
                     {ticket.description && (
                       <p className="text-xs text-muted-foreground line-clamp-1 mb-1.5">{ticket.description}</p>
                     )}

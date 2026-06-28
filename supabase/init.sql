@@ -262,6 +262,7 @@ CREATE TABLE IF NOT EXISTS "payout_requests" (
 );
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "passwordHash" text;
 ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "ticketMode" text DEFAULT 'off';
+ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "ticketDelaySeconds" integer DEFAULT 0;
 -- Widget appearance + customization columns. These were added to the agents
 -- CREATE TABLE block after the table already existed on deployed databases, so
 -- without these ALTER statements the live "agents" table is missing them. That

@@ -372,14 +372,26 @@ export async function getTicketsByWorkspace(workspaceId: number, status?: string
   if (!db) return [];
   const conditions = [eq(tickets.workspaceId, workspaceId)];
   if (status) conditions.push(eq(tickets.status, status as "open" | "in-progress" | "closed"));
-  return db.select().from(tickets).where(and(...conditions)).orderBy(desc(tickets.createdAt));
+  const rows = await db
+    .select()
+    .from(tickets)
+    .leftJoin(contacts, eq(tickets.contactId, contacts.id))
+    .where(and(...conditions))
+    .orderBy(desc(tickets.createdAt));
+  return rows.map((r) => ({ ...r.tickets, contactName: r.contacts?.name ?? null, contactEmail: r.contacts?.email ?? null }));
 }
 
 export async function getTicketById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(tickets).where(eq(tickets.id, id)).limit(1);
-  return result[0];
+  const rows = await db
+    .select()
+    .from(tickets)
+    .leftJoin(contacts, eq(tickets.contactId, contacts.id))
+    .where(eq(tickets.id, id))
+    .limit(1);
+  const r = rows[0];
+  return r ? { ...r.tickets, contactName: r.contacts?.name ?? null, contactEmail: r.contacts?.email ?? null } : undefined;
 }
 
 export async function getTicketsByContact(contactId: number) {

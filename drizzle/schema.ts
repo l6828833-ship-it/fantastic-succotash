@@ -81,6 +81,9 @@ export const agents = pgTable("agents", {
   // When to offer "Create a ticket" in the widget:
   //  off | always (from chat start) | ai_fallback (when the AI can't help)
   ticketMode: text("ticketMode").$type<"off" | "always" | "ai_fallback">().default("off"),
+  // When ticketMode is "ai_fallback": how long (seconds) to wait for a human to
+  // reply before offering the visitor a support ticket. 0 = offer immediately.
+  ticketDelaySeconds: integer("ticketDelaySeconds").default(0),
   isActive: boolean("isActive").default(true),
   createdAt: ts("createdAt").defaultNow().notNull(),
   updatedAt: ts("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),

@@ -75,8 +75,14 @@ const WIDGET_JS = `(function(){
   // appears from the start in "always", and after the AI can't help in
   // "ai_fallback".
   var ticketMode = (cfg.ticketMode === "always" || cfg.ticketMode === "ai_fallback") ? cfg.ticketMode : "off";
+  // How long to wait for a human before offering a ticket (ai_fallback mode).
+  var ticketDelaySeconds = Number(cfg.ticketDelaySeconds) || 0;
   var ticketForm = null;
   var ticketOffered = false;
+  // Set true once a human/agent reply arrives via polling — cancels any pending
+  // ticket offer because someone IS available.
+  var humanReplied = false;
+  var ticketTimer = null;
 
   // Launcher icon presets. The default "chat" icon is available on every plan;
   // the rest are premium and require a paid plan. Values are filled SVGs (the
@@ -254,8 +260,30 @@ const WIDGET_JS = `(function(){
       var m = list[i];
       if (Number(m.id) <= lastMsgId) continue;
       bumpSeen(m.id);
+      // A human agent replied from the Inbox — someone IS available, so cancel
+      // any pending ticket offer.
+      if (m.role === "agent"){
+        humanReplied = true;
+        if (ticketTimer){ clearTimeout(ticketTimer); ticketTimer = null; }
+      }
       addMsg("bot", m.content || "");
     }
+  }
+
+  // Reveal the ticket option now (used immediately or after the wait timer).
+  function offerTicketNow(){
+    if (ticketOffered || humanReplied) return;
+    ticketOffered = true;
+    ticketBtn.style.display = "flex";
+    addMsg("bot", "No one's available to continue right now. You can open a support ticket and we'll get back to you by email.");
+  }
+
+  // Offer a ticket after ticketDelaySeconds, unless a human replies first.
+  function scheduleTicketOffer(){
+    if (ticketOffered || humanReplied || ticketTimer) return;
+    var ms = (ticketDelaySeconds > 0 ? ticketDelaySeconds : 0) * 1000;
+    if (ms <= 0){ offerTicketNow(); return; }
+    ticketTimer = setTimeout(function(){ ticketTimer = null; offerTicketNow(); }, ms);
   }
 
   function poll(){
@@ -424,13 +452,14 @@ const WIDGET_JS = `(function(){
       if (data && data.mode === "human"){
         // A human will answer from the Inbox; their reply arrives via polling.
         if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", "You're connected to our team — someone will reply right here shortly."); }
+        // If no human replies within the wait window, offer a ticket.
+        if (ticketMode === "ai_fallback"){ scheduleTicketOffer(); }
       } else if (data && data.reply){
         addMsg("bot", data.reply);
-        // In ai_fallback mode, offer a ticket once the AI couldn't answer.
-        if (ticketMode === "ai_fallback" && data.fallback && !ticketOffered){
-          ticketOffered = true;
-          ticketBtn.style.display = "flex";
-          addMsg("bot", "I couldn't fully answer that. You can open a support ticket and our team will follow up.");
+        // In ai_fallback mode, offer a ticket when the AI couldn't answer — after
+        // the configured wait (so a human still has a chance to jump in first).
+        if (ticketMode === "ai_fallback" && data.fallback){
+          scheduleTicketOffer();
         }
       } else {
         addMsg("bot", "Sorry, something went wrong. Please try again.");
@@ -466,6 +495,7 @@ const WIDGET_JS = `(function(){
     launcher.innerHTML = launcherMarkup(a.launcherIcon, a.plan);
     leadRequired = !!a.leadCapture;
     if (a.ticketMode === "always" || a.ticketMode === "ai_fallback") ticketMode = a.ticketMode;
+    if (typeof a.ticketDelaySeconds === "number") ticketDelaySeconds = a.ticketDelaySeconds;
     if (ticketMode === "always") ticketBtn.style.display = "flex";
   }).catch(function(){}).then(function(){
     // Always mark config resolved so the open flow can proceed (greet or lead).
@@ -512,6 +542,7 @@ export function registerWidgetRoutes(app: Express) {
         leadCapture: agent.leadCaptureEnabled ?? false,
         leadFields: (agent.leadCaptureFields && agent.leadCaptureFields.length > 0) ? agent.leadCaptureFields : ["name", "email"],
         ticketMode: agent.ticketMode ?? "off",
+        ticketDelaySeconds: agent.ticketDelaySeconds ?? 0,
         plan: workspace?.plan ?? "starter",
         isActive: agent.isActive ?? true,
       });
