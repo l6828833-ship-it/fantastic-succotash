@@ -13,6 +13,7 @@ import {
   isEmailConfigured,
   sendBulkEmails,
   sendEmail,
+  ticketReplyAddress,
   personalize,
   renderCampaignHtml,
   unsubscribeUrl,
@@ -483,7 +484,12 @@ const ticketsRouter = router({
       if (contact?.email && isEmailConfigured()) {
         try {
           const who = contact.name || "there";
-          const { brand, replyTo } = await getWorkspaceEmailBranding(workspace.id);
+          const { brand, replyTo: wsReplyTo } = await getWorkspaceEmailBranding(workspace.id);
+          const ticketReply = ticket?.id ? ticketReplyAddress(ticket.id) : null;
+          const replyTo = ticketReply || wsReplyTo;
+          const replyLine = ticketReply
+            ? `<p style="color:#6b7280;">You can reply directly to this email — your message will be added to this ticket.</p>`
+            : "";
           await sendEmail({
             to: contact.email,
             replyTo,
@@ -494,10 +500,11 @@ const ticketsRouter = router({
                 `<p>Hi ${who},</p>` +
                 `<p>Thanks for reaching out. We've created a support ticket for you and our team will get back to you soon.</p>` +
                 `<p style="color:#6b7280;"><strong>Subject:</strong> ${input.title}</p>` +
-                (input.description ? `<p style="color:#6b7280;"><strong>Details:</strong> ${input.description}</p>` : ""),
+                (input.description ? `<p style="color:#6b7280;"><strong>Details:</strong> ${input.description}</p>` : "") +
+                replyLine,
               brand,
             }),
-            text: `Hi ${who},\n\nThanks for reaching out. We've created a support ticket ("${input.title}") and our team will get back to you soon.`,
+            text: `Hi ${who},\n\nThanks for reaching out. We've created a support ticket ("${input.title}") and our team will get back to you soon.${ticketReply ? "\n\nYou can reply directly to this email to add to your ticket." : ""}`,
           });
         } catch (e) {
           console.error("[Tickets] confirmation email failed", e);

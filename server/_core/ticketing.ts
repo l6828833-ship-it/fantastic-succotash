@@ -1,5 +1,5 @@
 import * as db from "../db";
-import { brandedEmail, getWorkspaceEmailBranding, isEmailConfigured, sendEmail } from "./email";
+import { brandedEmail, getWorkspaceEmailBranding, isEmailConfigured, sendEmail, ticketReplyAddress } from "./email";
 
 export interface CreateCustomerTicketInput {
   workspaceId: number;
@@ -90,17 +90,24 @@ export async function createCustomerTicket(input: CreateCustomerTicketInput) {
   // Branded confirmation email to the customer.
   if (input.sendConfirmation && email && isEmailConfigured()) {
     try {
-      const { brand, replyTo } = await getWorkspaceEmailBranding(input.workspaceId);
+      const { brand, replyTo: wsReplyTo } = await getWorkspaceEmailBranding(input.workspaceId);
+      // Per-ticket reply address (threads replies back onto this ticket) when an
+      // inbound domain is configured; otherwise fall back to the support email.
+      const ticketReply = ticket?.id ? ticketReplyAddress(ticket.id) : null;
+      const replyTo = ticketReply || wsReplyTo;
+      const replyLine = ticketReply
+        ? `<p style="color:#6b7280;">You can reply directly to this email — your message will be added to this ticket and our team will see it.</p>`
+        : "";
       await sendEmail({
         to: email,
         replyTo,
         subject: `We received your request: ${subject}`,
         html: brandedEmail({
           title: "We've got your request",
-          bodyHtml: `<p>Hi ${name || "there"},</p><p>Thanks for reaching out. We've created a support ticket for you and our team will get back to you soon.</p><p style="color:#6b7280;"><strong>Subject:</strong> ${subject}</p>`,
+          bodyHtml: `<p>Hi ${name || "there"},</p><p>Thanks for reaching out. We've created a support ticket for you and our team will get back to you soon.</p><p style="color:#6b7280;"><strong>Subject:</strong> ${subject}</p>${replyLine}`,
           brand,
         }),
-        text: `Hi ${name || "there"},\n\nThanks for reaching out. We've created a support ticket ("${subject}") and our team will get back to you soon.`,
+        text: `Hi ${name || "there"},\n\nThanks for reaching out. We've created a support ticket ("${subject}") and our team will get back to you soon.${ticketReply ? "\n\nYou can reply directly to this email to add to your ticket." : ""}`,
       });
     } catch (e) {
       console.error("[Ticketing] confirmation email failed", e);

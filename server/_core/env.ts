@@ -29,6 +29,10 @@ export const ENV = {
   // used as a fallback when no Brevo key is set. Email degrades gracefully when
   // neither is configured (isEmailConfigured() === false).
   brevoApiKey: process.env.BREVO_API_KEY ?? "",
+  // Inbound domain for email-to-ticket replies (MX pointed at your inbound mail
+  // provider, e.g. Brevo Inbound). When set, ticket emails get a per-ticket
+  // Reply-To at this domain so customer replies thread back into the ticket.
+  inboundEmailDomain: process.env.INBOUND_EMAIL_DOMAIN ?? "",
   smtpHost: process.env.SMTP_HOST ?? "",
   smtpPort: Number(process.env.SMTP_PORT ?? "587"),
   // Force a TLS-on-connect (smtps) socket. Defaults to true for port 465.
