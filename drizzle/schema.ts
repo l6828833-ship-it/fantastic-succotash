@@ -58,6 +58,11 @@ export const workspaces = pgTable("workspaces", {
   companySize: varchar("companySize", { length: 64 }),
   features: jsonb("features").$type<string[]>(),
   plan: varchar("plan", { length: 64 }).default("free"),
+  // Stripe subscription id for the active paid plan (used to cancel/stop renewal).
+  stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }),
+  // Set true when the user cancels: the plan stays active until the period ends,
+  // then the customer.subscription.deleted webhook downgrades to free.
+  subscriptionCancelAtPeriodEnd: boolean("subscriptionCancelAtPeriodEnd").default(false),
   // Manual online/offline toggle for the human support team. When offline, the
   // widget offers a ticket instead of promising a live human reply.
   supportOnline: boolean("supportOnline").default(true),

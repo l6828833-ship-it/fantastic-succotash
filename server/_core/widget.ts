@@ -744,6 +744,26 @@ export function registerWidgetRoutes(app: Express) {  // The widget loader scrip
       if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
       if ((agent.ticketMode ?? "off") === "off") { res.status(403).json({ error: "Ticketing is not enabled for this agent." }); return; }
 
+      // Enforce the workspace plan's monthly ticket limit (free plan = none).
+      try {
+        const wsForTickets = await db.getWorkspaceById(agent.workspaceId);
+        const ticketLimit = db.ticketLimitForPlan(wsForTickets?.plan);
+        if (Number.isFinite(ticketLimit)) {
+          const usedTickets = await db.countTicketsThisMonth(agent.workspaceId);
+          if (usedTickets >= ticketLimit) {
+            res.status(403).json({
+              error: ticketLimit === 0
+                ? "Support tickets aren't available right now."
+                : "We've reached our ticket limit for this month. Please try again later.",
+              limitReached: true,
+            });
+            return;
+          }
+        }
+      } catch (ticketLimitErr) {
+        console.error("[Widget] ticket limit check failed", ticketLimitErr);
+      }
+
       const result = await createCustomerTicket({
         workspaceId: agent.workspaceId,
         subject,
@@ -828,7 +848,7 @@ export function registerWidgetRoutes(app: Express) {  // The widget loader scrip
           const wsForLimit = await db.getWorkspaceById(agent.workspaceId);
           const convLimit = db.conversationLimitForPlan(wsForLimit?.plan);
           if (Number.isFinite(convLimit)) {
-            const used = await db.countConversationsThisMonth(agent.workspaceId);
+            const used = await db.countAiConversationsThisMonth(agent.workspaceId);
             if (used >= convLimit) {
               res.json({
                 reply: agent.fallbackMessage || "We're receiving a lot of messages right now. Please reach out again a little later.",
