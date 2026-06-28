@@ -1311,7 +1311,14 @@ const billingRouter = router({
       } catch (err) {
         if (err instanceof TRPCError) throw err;
         console.error("[Billing] checkout failed", err);
-        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not start checkout. Please try again." });
+        // Surface the underlying provider/config error (e.g. a Stripe key
+        // mistake or a Cryptomus API message) so the issue is actionable,
+        // instead of masking everything behind a generic message.
+        const message =
+          err instanceof Error && err.message
+            ? err.message
+            : "Could not start checkout. Please try again.";
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message });
       }
     }),
 });
