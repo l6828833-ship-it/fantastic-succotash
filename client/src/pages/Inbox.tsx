@@ -2,7 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
 import { useState, useRef, useEffect } from "react";
 import {
-  MessageSquare, Send, Bot, User, Clock, CheckCircle2, AlertCircle, Sparkles, Paperclip, MoreHorizontal, UserPlus, Tag, X, FileText, Image, Loader2,
+  MessageSquare, Send, Bot, User, Clock, CheckCircle2, AlertCircle, Sparkles, Paperclip, MoreHorizontal, UserPlus, UserCheck, Tag, X, FileText, Image, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -197,7 +197,7 @@ export default function Inbox() {
                         {status?.label}
                       </span>
                       {conv.isEscalated && (
-                        <Badge variant="destructive" className="text-xs px-1.5 py-0 h-4">Escalated</Badge>
+                        <Badge variant="destructive" className="text-xs px-1.5 py-0 h-4">Needs human</Badge>
                       )}
                       {conv.channel && (
                         <span className="text-xs text-muted-foreground capitalize">{conv.channel}</span>
@@ -258,6 +258,12 @@ export default function Inbox() {
 
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-muted/10">
+            {selectedConv.isEscalated && (
+              <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                <UserCheck className="w-4 h-4 shrink-0" />
+                <span>This conversation needs a human — the visitor asked for an agent. Reply below to take over.</span>
+              </div>
+            )}
             {!messages || messages.length === 0 ? (
               <div className="flex items-center justify-center h-full">
                 <p className="text-sm text-muted-foreground">No messages yet</p>

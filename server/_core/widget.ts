@@ -458,6 +458,9 @@ const WIDGET_JS = `(function(){
       if (data && data.messageId) bumpSeen(data.messageId);
       if (data && data.mode === "human"){
         var notice = data.escalationMessage || null;
+        // The handoff notice is persisted server-side; skip it in polling so it
+        // isn't shown twice.
+        if (data.escalationMessageId) bumpSeen(data.escalationMessageId);
         if (data.humanAvailable === false){
           // No human online right now — show the offline message and offer a
           // ticket, NOT the "connecting you to our team" escalation notice.
@@ -814,6 +817,7 @@ export function registerWidgetRoutes(app: Express) {  // The widget loader scrip
       // message. If one fires, mark the conversation escalated so it routes to a
       // human (or to a ticket when the team is offline).
       let escalationMessage: string | null = null;
+      let escalationMessageId: number | null = null;
       if (conv && !conv.isEscalated && agent.handoffMode === "ai_first_human_escalation") {
         const prior = await db.getMessagesByConversation(conversationId);
         const userCount = prior.filter((x) => x.role === "user").length;
@@ -821,14 +825,24 @@ export function registerWidgetRoutes(app: Express) {  // The widget loader scrip
           await db.updateConversation(conversationId, { isEscalated: true });
           conv.isEscalated = true;
           escalationMessage = agent.escalationMessage || "I'm connecting you with a member of our team who can help. Please hold on a moment.";
-          // Notify the workspace owner that a conversation was escalated.
+          // Persist the handoff notice the visitor sees so it also shows in the
+          // agent's Inbox thread. When the team is offline we record the offline
+          // message instead (that's what the visitor actually sees).
+          const noticeText = humanAvailable
+            ? escalationMessage
+            : (agent.offlineMessage || "No one's available right now. Leave a ticket and we'll get back to you by email.");
+          try {
+            const noticeMsg = await db.createMessage({ conversationId, role: "agent", content: noticeText });
+            escalationMessageId = noticeMsg?.id ?? null;
+          } catch (e) { console.error("[Widget] escalation notice persist failed", e); }
+          // Notify the workspace owner that a conversation needs a human.
           try {
             if (ws) {
               await db.createNotification({
                 workspaceId: agent.workspaceId,
                 userId: ws.userId,
                 type: "escalation",
-                title: "Conversation escalated",
+                title: humanAvailable ? "Conversation needs a human" : "Human requested (team offline)",
                 body: String(message).slice(0, 140),
                 relatedId: conversationId,
                 relatedType: "conversation",
@@ -853,6 +867,7 @@ export function registerWidgetRoutes(app: Express) {  // The widget loader scrip
           userMessageId,
           humanAvailable,
           escalationMessage,
+          escalationMessageId,
           offlineMessage: agent.offlineMessage ?? null,
         });
         return;
