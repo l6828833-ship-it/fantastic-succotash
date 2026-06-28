@@ -738,6 +738,27 @@ export function normalizePlan(plan?: string | null): string {
   return plan === "growth" ? "pro" : plan;
 }
 
+// Plan tiers in ascending order, for boolean feature gating.
+const PLAN_RANK: Record<string, number> = { free: 0, starter: 1, pro: 2, business: 3, enterprise: 4 };
+
+// Minimum plan required for each gated (boolean) feature. Keep in sync with the
+// pricing/comparison tables shown to users.
+export const FEATURE_MIN_PLAN: Record<string, string> = {
+  learnFromWebsite: "starter",
+  premiumIcons: "starter",
+  removeBranding: "starter",
+  humanHandoff: "starter",
+  emailBranding: "pro",
+  csvExport: "pro",
+};
+
+// True when the given plan includes the named feature (tier >= the minimum).
+export function planHasFeature(plan: string | null | undefined, feature: string): boolean {
+  const min = FEATURE_MIN_PLAN[feature];
+  if (!min) return true; // unknown feature → not gated
+  return (PLAN_RANK[normalizePlan(plan)] ?? 0) >= (PLAN_RANK[min] ?? 99);
+}
+
 // Per-plan contact storage limits. Use Infinity for "unlimited". Keep plan ids
 // in sync with CONVERSATION_LIMITS / TEAM_SEAT_LIMITS / AGENT_LIMITS /
 // PLAN_PRICE_CENTS and the public plan lists.

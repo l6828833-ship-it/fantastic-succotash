@@ -71,14 +71,17 @@ export async function getWorkspaceEmailBranding(
 ): Promise<{ brand: EmailBranding; replyTo?: string }> {
   try {
     const ws = await db.getWorkspaceById(workspaceId);
+    // Email branding is a paid (Pro+) feature. On lower plans, ignore any saved
+    // branding and fall back to the platform defaults.
+    const branded = db.planHasFeature(ws?.plan, "emailBranding");
     return {
       brand: {
-        name: ws?.emailBrandName || ENV.emailFromName || "Chatrico",
-        logoUrl: ws?.emailLogoUrl || null,
-        color: ws?.emailBrandColor || null,
-        signature: ws?.emailSignature || null,
+        name: (branded && ws?.emailBrandName) || ENV.emailFromName || "Chatrico",
+        logoUrl: (branded && ws?.emailLogoUrl) || null,
+        color: (branded && ws?.emailBrandColor) || null,
+        signature: (branded && ws?.emailSignature) || null,
       },
-      replyTo: ws?.supportEmail || undefined,
+      replyTo: (branded && ws?.supportEmail) || undefined,
     };
   } catch {
     return { brand: {} };
