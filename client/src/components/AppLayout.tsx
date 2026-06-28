@@ -39,7 +39,7 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { toast } from "sonner";
 
 const navItems = [
-  { href: "/", icon: LayoutDashboard, label: "Dashboard" },
+  { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/agents", icon: Bot, label: "AI Agents" },
   { href: "/inbox", icon: Inbox, label: "Inbox" },
   { href: "/tickets", icon: Ticket, label: "Tickets" },

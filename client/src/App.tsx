@@ -70,27 +70,17 @@ function OnboardingGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-// The index route: logged-out visitors see the public landing page (instead of
-// being bounced to login), while authenticated users get their dashboard.
-function HomeOrDashboard() {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="w-6 h-6 text-primary animate-spin" />
-      </div>
-    );
-  }
-
-  if (!user) return <Home />;
-
+// The public landing page lives at the index route (chatrico.com/). The
+// authenticated app/dashboard is kept separate under /dashboard.
+function DashboardPage() {
   return (
-    <OnboardingGate>
-      <AppLayout>
-        <Dashboard />
-      </AppLayout>
-    </OnboardingGate>
+    <AuthGate>
+      <OnboardingGate>
+        <AppLayout>
+          <Dashboard />
+        </AppLayout>
+      </OnboardingGate>
+    </AuthGate>
   );
 }
 
@@ -99,7 +89,8 @@ function Router() {
     <Switch>
       <Route path="/login" component={Login} />
       <Route path="/ticket/:id" component={({ params }) => <TicketPortal ticketId={params.id} />} />
-      <Route path="/" component={HomeOrDashboard} />
+      <Route path="/" component={Home} />
+      <Route path="/dashboard" component={DashboardPage} />
       <Route path="/onboarding" component={() => (
         <AuthGate>
           <Onboarding />

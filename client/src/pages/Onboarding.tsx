@@ -106,7 +106,7 @@ export default function Onboarding() {
       // transitions to the dashboard instantly (no refetch wait).
       if (updated) utils.workspace.get.setData(undefined, updated);
       toast.success("Welcome aboard! Your workspace is ready.");
-      navigate("/");
+      navigate("/dashboard");
 
       // Create a default agent in the background — don't block the redirect.
       const industryLabel = INDUSTRIES.find((i) => i.id === industry)?.label ?? "General";
@@ -137,7 +137,7 @@ export default function Onboarding() {
         onboardingStep: 5,
       });
       if (updated) utils.workspace.get.setData(undefined, updated);
-      navigate("/");
+      navigate("/dashboard");
     } catch (err) {
       toast.error("Something went wrong. Please try again.");
     }
