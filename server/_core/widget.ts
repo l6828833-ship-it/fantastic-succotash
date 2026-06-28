@@ -2,6 +2,7 @@ import type { Express, Request, Response } from "express";
 import * as db from "../db";
 import { invokeLLM, type Message as LLMMessage } from "./llm";
 import { createCustomerTicket } from "./ticketing";
+import { requestBaseUrl } from "./email";
 
 // The embeddable widget runs on third-party websites, so these routes must be
 // public (no auth) and CORS-enabled.
@@ -711,6 +712,7 @@ export function registerWidgetRoutes(app: Express) {  // The widget loader scrip
         conversationId: body.conversationId ? Number(body.conversationId) : null,
         channel: "web",
         sendConfirmation: true,
+        baseUrl: requestBaseUrl(req),
       });
       res.json({ ok: true, ticketId: result.ticketId });
     } catch (error) {

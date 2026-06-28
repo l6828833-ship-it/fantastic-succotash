@@ -97,15 +97,35 @@ export async function sendEmail(msg: EmailMessage): Promise<void> {
   if (!isEmailConfigured()) {
     throw new Error("Email is not configured (set BREVO_API_KEY + EMAIL_FROM, or SMTP_HOST + EMAIL_FROM)");
   }
-  // Prefer the Brevo HTTP API when a key is present; otherwise use SMTP.
+  // Prefer the Brevo HTTP API when a key is present. If Brevo fails and SMTP is
+  // also configured, fall back to SMTP so email keeps working; otherwise surface
+  // the error. The From address is always the main verified sender (EMAIL_FROM).
   if (ENV.brevoApiKey) {
-    await sendViaBrevo(msg);
-    return;
+    try {
+      await sendViaBrevo(msg);
+      return;
+    } catch (err) {
+      if (!ENV.smtpHost) throw err;
+      console.error("[Email] Brevo send failed; falling back to SMTP:", (err as Error).message);
+    }
   }
   const transporter = getTransporter();
   if (!transporter) throw new Error("Email is not configured (set SMTP_HOST and EMAIL_FROM)");
   const from = ENV.emailFromName ? `"${ENV.emailFromName}" <${ENV.emailFrom}>` : ENV.emailFrom;
   await transporter.sendMail({ from, to: msg.to, subject: msg.subject, html: msg.html, text: msg.text, replyTo: msg.replyTo });
+}
+
+// Absolute base URL for building links in emails: prefer APP_BASE_URL, else
+// derive from the incoming request headers (works without any config).
+export function requestBaseUrl(req: Request): string {
+  if (ENV.appBaseUrl) return ENV.appBaseUrl.replace(/\/$/, "");
+  try {
+    const proto = String(req.headers["x-forwarded-proto"] || "https").split(",")[0].trim();
+    const host = String(req.headers["x-forwarded-host"] || req.headers.host || "").split(",")[0].trim();
+    return host ? `${proto}://${host}` : "";
+  } catch {
+    return "";
+  }
 }
 
 
@@ -251,6 +271,14 @@ export function parseTicketReplyAddress(addr: string): { ticketId: number } | nu
   return { ticketId };
 }
 
+// Public reply-by-link portal URL for a ticket (works without any inbound email
+// setup). Reuses the per-ticket token. Returns null when no base URL is known.
+export function ticketPortalUrl(baseUrl: string | null | undefined, ticketId: number): string | null {
+  const base = String(baseUrl || ENV.appBaseUrl || "").replace(/\/$/, "");
+  if (!base) return null;
+  return `${base}/ticket/${ticketId}?t=${ticketReplyToken(ticketId)}`;
+}
+
 // Strip quoted history/signatures from an inbound reply so only the new message
 // is stored. Best-effort: cuts at common reply separators and quoted lines.
 export function stripQuotedReply(raw: string): string {
@@ -377,6 +405,76 @@ export function registerEmailRoutes(app: Express) {
     } catch (error) {
       console.error("[Inbound] webhook failed", error);
       res.json({ ok: true });
+    }
+  });
+
+  // ── Reply-by-link ticket portal (no inbound email needed) ──────────────────
+  // Public, token-validated. The ticket email links here so customers can read
+  // and reply to their ticket; replies are appended as customer messages.
+  app.get("/api/ticket/portal/:id", async (req: Request, res: Response) => {
+    try {
+      const id = Number(req.params.id);
+      const token = String(req.query.t ?? "");
+      if (!id || token !== ticketReplyToken(id)) { res.status(403).json({ error: "Invalid or expired link" }); return; }
+      const ticket = await db.getTicketById(id);
+      if (!ticket) { res.status(404).json({ error: "Ticket not found" }); return; }
+      const { brand } = await getWorkspaceEmailBranding(ticket.workspaceId);
+      let messages: Array<{ role: string; content: string; createdAt: unknown }> = [];
+      if (ticket.conversationId) {
+        const all = await db.getMessagesByConversation(ticket.conversationId);
+        messages = all
+          .filter((m) => m.isInternal !== true && m.role !== "note")
+          .map((m) => ({ role: m.role === "user" ? "you" : "agent", content: m.content, createdAt: m.createdAt }));
+      }
+      res.json({
+        id: ticket.id,
+        subject: ticket.title,
+        status: ticket.status,
+        brandName: brand.name || "Support",
+        brandColor: brand.color || "#6366f1",
+        messages,
+      });
+    } catch (error) {
+      console.error("[Portal] load failed", error);
+      res.status(500).json({ error: "Something went wrong" });
+    }
+  });
+
+  app.post("/api/ticket/portal/:id/reply", async (req: Request, res: Response) => {
+    try {
+      const id = Number(req.params.id);
+      const body = (req.body ?? {}) as { t?: string; message?: string };
+      const token = String(body.t ?? "");
+      const message = String(body.message ?? "").trim().slice(0, 8000);
+      if (!id || token !== ticketReplyToken(id)) { res.status(403).json({ error: "Invalid or expired link" }); return; }
+      if (!message) { res.status(400).json({ error: "Please type a message" }); return; }
+      const ticket = await db.getTicketById(id);
+      if (!ticket) { res.status(404).json({ error: "Ticket not found" }); return; }
+
+      let conversationId = ticket.conversationId ?? null;
+      if (!conversationId) {
+        const conv = await db.createConversation({ workspaceId: ticket.workspaceId, channel: "web", visitorId: `ticket_${id}` });
+        conversationId = conv?.id ?? null;
+        if (conversationId) await db.updateTicket(id, { conversationId });
+      }
+      if (conversationId) await db.createMessage({ conversationId, role: "user", content: message });
+      if (ticket.status === "closed") await db.updateTicket(id, { status: "open" });
+      const ws = await db.getWorkspaceById(ticket.workspaceId);
+      if (ws) {
+        await db.createNotification({
+          workspaceId: ticket.workspaceId,
+          userId: ws.userId,
+          type: "ticket_reply",
+          title: "Customer replied to a ticket",
+          body: `${ticket.title}: ${message.slice(0, 120)}`,
+          relatedId: id,
+          relatedType: "ticket",
+        });
+      }
+      res.json({ ok: true });
+    } catch (error) {
+      console.error("[Portal] reply failed", error);
+      res.status(500).json({ error: "Something went wrong" });
     }
   });
 
