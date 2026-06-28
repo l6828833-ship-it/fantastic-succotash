@@ -360,3 +360,31 @@ ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "subscriptionCancelAtPeriodEnd
 UPDATE "workspaces" SET "plan" = 'pro' WHERE "plan" = 'growth';
 UPDATE "payments" SET "plan" = 'pro' WHERE "plan" = 'growth';
 UPDATE "referrals" SET "plan" = 'pro' WHERE "plan" = 'growth';
+
+
+-- Admin: account suspension flag.
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "suspended" boolean DEFAULT false;
+
+-- Admin: persisted audit log of admin actions.
+CREATE TABLE IF NOT EXISTS "admin_logs" (
+  "id" serial PRIMARY KEY,
+  "actorUserId" integer,
+  "actorEmail" varchar(320),
+  "action" varchar(64) NOT NULL,
+  "targetType" varchar(64),
+  "targetId" varchar(64),
+  "detail" text,
+  "createdAt" timestamptz NOT NULL DEFAULT now()
+);
+
+-- Platform-wide key/value settings (e.g. custom head/body code snippets).
+CREATE TABLE IF NOT EXISTS "app_settings" (
+  "key" varchar(128) PRIMARY KEY,
+  "value" text,
+  "updatedAt" timestamptz NOT NULL DEFAULT now()
+);
+
+
+-- Admin: track user IP addresses to detect duplicate/abusive accounts.
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "lastIp" varchar(64);
+ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "signupIp" varchar(64);

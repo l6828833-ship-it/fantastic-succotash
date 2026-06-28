@@ -1238,14 +1238,19 @@ const adminRouter = router({
   workspaces: adminProcedure.query(async () => db.getAllWorkspaces()),
   setUserRole: adminProcedure
     .input(z.object({ id: z.number(), role: z.enum(["user", "admin"]) }))
-    .mutation(async ({ input }) => db.updateUserRole(input.id, input.role)),
+    .mutation(async ({ ctx, input }) => {
+      const row = await db.updateUserRole(input.id, input.role);
+      await db.createAdminLog({ actorUserId: ctx.user.id, actorEmail: ctx.user.email ?? null, action: "set_user_role", targetType: "user", targetId: String(input.id), detail: input.role });
+      return row;
+    }),
   setWorkspacePlan: adminProcedure
     .input(z.object({ id: z.number(), plan: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       await db.updateWorkspace(input.id, { plan: input.plan });
       // Credit the referring affiliate for the sale (no-op for free plans or
       // when the workspace wasn't referred).
       await creditReferralForUpgrade({ workspaceId: input.id, plan: input.plan });
+      await db.createAdminLog({ actorUserId: ctx.user.id, actorEmail: ctx.user.email ?? null, action: "set_workspace_plan", targetType: "workspace", targetId: String(input.id), detail: input.plan });
       return { success: true };
     }),
   // ─── Affiliate management ───────────────────────────────────────────────────
@@ -1398,6 +1403,74 @@ const adminRouter = router({
     cryptomus: isCryptomusConfigured(),
     email: isEmailConfigured(),
   })),
+
+  // ─── Account suspension & deletion (destructive) ────────────────────────────
+  setUserSuspended: adminProcedure
+    .input(z.object({ id: z.number(), suspended: z.boolean() }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.id === ctx.user.id) throw new TRPCError({ code: "BAD_REQUEST", message: "You can't suspend your own account." });
+      const row = await db.setUserSuspended(input.id, input.suspended);
+      await db.createAdminLog({ actorUserId: ctx.user.id, actorEmail: ctx.user.email ?? null, action: input.suspended ? "suspend_user" : "unsuspend_user", targetType: "user", targetId: String(input.id), detail: row?.email ?? null });
+      return { success: true };
+    }),
+  deleteUser: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.id === ctx.user.id) throw new TRPCError({ code: "BAD_REQUEST", message: "You can't delete your own account." });
+      await db.deleteUserCascade(input.id);
+      await db.createAdminLog({ actorUserId: ctx.user.id, actorEmail: ctx.user.email ?? null, action: "delete_user", targetType: "user", targetId: String(input.id), detail: null });
+      return { success: true };
+    }),
+  deleteWorkspace: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      await db.deleteWorkspaceCascade(input.id);
+      await db.createAdminLog({ actorUserId: ctx.user.id, actorEmail: ctx.user.email ?? null, action: "delete_workspace", targetType: "workspace", targetId: String(input.id), detail: null });
+      return { success: true };
+    }),
+
+  // ─── Refund a payment ───────────────────────────────────────────────────────
+  refundPayment: adminProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      const row = await db.refundPayment(input.id);
+      await db.createAdminLog({ actorUserId: ctx.user.id, actorEmail: ctx.user.email ?? null, action: "refund_payment", targetType: "payment", targetId: String(input.id), detail: row ? `${row.plan} · $${((row.amountCents ?? 0) / 100).toFixed(2)}` : null });
+      return { success: true };
+    }),
+
+  // ─── Persisted audit log of admin actions ───────────────────────────────────
+  logs: adminProcedure.query(async () => db.getAdminLogs()),
+
+  // ─── Growth charts (signups + revenue, last 30 days) ────────────────────────
+  growth: adminProcedure.query(async () => {
+    const [signups, revenue] = await Promise.all([db.getSignupsByDay(), db.getRevenueByDay()]);
+    return {
+      signups: signups.map((s) => ({ date: String(s.date), count: Number(s.count) })),
+      revenue: revenue.map((r) => ({ date: String(r.date), amount: Number(r.cents) / 100 })),
+    };
+  }),
+
+  // ─── Custom code / platform settings ────────────────────────────────────────
+  getSettings: adminProcedure.query(async () => ({
+    customHeadCode: (await db.getAppSetting("customHeadCode")) ?? "",
+    customBodyCode: (await db.getAppSetting("customBodyCode")) ?? "",
+  })),
+  setSettings: adminProcedure
+    .input(z.object({ customHeadCode: z.string().max(20000).optional(), customBodyCode: z.string().max(20000).optional() }))
+    .mutation(async ({ ctx, input }) => {
+      if (input.customHeadCode !== undefined) await db.setAppSetting("customHeadCode", input.customHeadCode);
+      if (input.customBodyCode !== undefined) await db.setAppSetting("customBodyCode", input.customBodyCode);
+      await db.createAdminLog({ actorUserId: ctx.user.id, actorEmail: ctx.user.email ?? null, action: "update_settings", targetType: "settings", targetId: "custom_code", detail: null });
+      return { success: true };
+    }),
+});
+
+// ─── App config (public): custom code the admin injects site-wide ─────────────
+const appConfigRouter = router({
+  publicCode: publicProcedure.query(async () => ({
+    headCode: (await db.getAppSetting("customHeadCode")) ?? "",
+    bodyCode: (await db.getAppSetting("customBodyCode")) ?? "",
+  })),
 });
 
 // ─── Billing Router ───────────────────────────────────────────────────────────
@@ -1540,6 +1613,7 @@ export const appRouter = router({
   upload: uploadRouter,
   affiliate: affiliateRouter,
   admin: adminRouter,
+  appConfig: appConfigRouter,
   billing: billingRouter,
 });
 

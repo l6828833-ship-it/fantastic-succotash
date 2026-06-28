@@ -27,6 +27,12 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
+// Best-effort client IP (handles the common proxy header).
+function getClientIp(req: Request): string {
+  const xff = (req.headers["x-forwarded-for"] as string) || "";
+  return (xff.split(",")[0] || req.ip || req.socket?.remoteAddress || "").trim();
+}
+
 // OTP config: 6-digit codes, valid for 10 minutes, max 5 verification attempts.
 const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_MAX_ATTEMPTS = 5;
@@ -55,6 +61,7 @@ async function issueSession(req: Request, res: Response, openId: string, name: s
 async function completeSignup(req: Request, res: Response, user: { id: number; openId: string; name: string | null }, email: string) {
   await attributeReferral({ cookieHeader: req.headers.cookie, userId: user.id, name: user.name, email });
   res.clearCookie("cbp_ref", { path: "/" });
+  await db.setUserIp(user.id, getClientIp(req));
   await issueSession(req, res, user.openId, user.name ?? email);
 }
 
@@ -236,6 +243,7 @@ export function registerLocalAuthRoutes(app: Express) {
       }
 
       await db.upsertUser({ openId: user.openId, lastSignedIn: new Date() });
+      await db.setUserIp(user.id, getClientIp(req));
       await issueSession(req, res, user.openId, user.name ?? email);
       res.json({ success: true });
     } catch (error) {
