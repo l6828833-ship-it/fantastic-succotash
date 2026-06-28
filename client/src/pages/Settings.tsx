@@ -15,6 +15,7 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -35,25 +36,25 @@ const PLAN_CONFIG = {
     name: "Free",
     price: "$0",
     color: "text-slate-600 bg-slate-500/10 border-slate-200",
-    features: ["1 AI Agent", "50 conversations/mo", "30 contacts", "Knowledge base", "Lead capture"],
+    features: ["1 AI Agent", "50 AI conversations/mo", "Unlimited human chats", "30 contacts", "30 tickets/mo", "Knowledge base", "Lead capture", "Basic analytics", "Community support"],
   },
   starter: {
     name: "Starter",
     price: "$9.99/mo",
     color: "text-blue-600 bg-blue-500/10 border-blue-200",
-    features: ["2 AI Agents", "1,000 conversations/mo", "1,000 contacts", "Tickets & email-to-ticket", "Remove branding"],
+    features: ["2 AI Agents", "1,000 AI conversations/mo", "Unlimited human chats", "1,000 contacts", "Unlimited tickets", "Human handoff & inbox", "Standard analytics", "Email support"],
   },
-  growth: {
-    name: "Growth",
+  pro: {
+    name: "Pro",
     price: "$49/mo",
     color: "text-purple-600 bg-purple-500/10 border-purple-200",
-    features: ["5 AI Agents", "5,000 conversations/mo", "5,000 contacts", "Human handoff & inbox", "Advanced analytics", "10 seats"],
+    features: ["5 AI Agents", "6,000 AI conversations/mo", "Unlimited human chats", "5,000 contacts", "Unlimited tickets", "Human handoff & inbox", "Email branding", "Segments + CSV export", "Advanced analytics", "10 seats", "Priority support"],
   },
   business: {
     name: "Business",
     price: "$129/mo",
     color: "text-emerald-600 bg-emerald-500/10 border-emerald-200",
-    features: ["15 AI Agents", "20,000 conversations/mo", "25,000 contacts", "Multi-language", "Email branding", "25 seats"],
+    features: ["15 AI Agents", "20,000 AI conversations/mo", "Unlimited human chats", "25,000 contacts", "Unlimited tickets", "Email branding", "Advanced analytics + export", "Multi-language", "25 seats", "Priority support + onboarding"],
   },
   enterprise: {
     name: "Enterprise",
@@ -165,12 +166,23 @@ export default function Settings() {
   const planInfo = PLAN_CONFIG[currentPlan as keyof typeof PLAN_CONFIG] ?? PLAN_CONFIG.free;
 
   // Billing / checkout (Stripe card + Cryptomus crypto).
-  const PURCHASABLE = ["starter", "growth", "business"];
+  const PURCHASABLE = ["starter", "pro", "business"];
   const { data: billingConfig } = trpc.billing.config.useQuery();
+  const { data: usage } = trpc.billing.usage.useQuery();
+  const utilsBilling = trpc.useUtils();
   const [payPlan, setPayPlan] = useState<string | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const createCheckout = trpc.billing.createCheckout.useMutation({
     onSuccess: (d) => { if (d?.url) window.location.href = d.url; },
     onError: (e) => toast.error(e.message || "Could not start checkout"),
+  });
+  const cancelSubscription = trpc.billing.cancelSubscription.useMutation({
+    onSuccess: () => {
+      toast.success("Your subscription won't renew. You keep access until the end of the billing period.");
+      setConfirmCancel(false);
+      utilsBilling.workspace.get.invalidate();
+    },
+    onError: (e) => toast.error(e.message || "Could not cancel the subscription"),
   });
   // Surface the result when the user returns from a payment provider.
   useEffect(() => {
@@ -190,7 +202,7 @@ export default function Settings() {
 
   const startCheckout = (provider: "stripe" | "cryptomus") => {
     if (!payPlan) return;
-    createCheckout.mutate({ plan: payPlan as "starter" | "growth" | "business", provider });
+    createCheckout.mutate({ plan: payPlan as "starter" | "pro" | "business", provider });
   };
 
   return (
@@ -696,6 +708,58 @@ export default function Settings() {
                     </div>
                   ))}
                 </div>
+                {currentPlan !== "free" && (
+                  <div className="mt-4 pt-4 border-t border-border">
+                    {workspace?.subscriptionCancelAtPeriodEnd ? (
+                      <p className="text-xs text-muted-foreground">
+                        Your plan is set to cancel at the end of the current billing period — you'll move to Free after that. No further charges.
+                      </p>
+                    ) : workspace?.stripeSubscriptionId ? (
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-xs text-muted-foreground">Renews automatically each month.</p>
+                        <Button size="sm" variant="outline" className="h-8 text-xs text-destructive hover:text-destructive" onClick={() => setConfirmCancel(true)}>
+                          Cancel subscription
+                        </Button>
+                      </div>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">This plan doesn't auto-renew.</p>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Usage this month */}
+            <Card className="border-border">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-base">Usage this month</CardTitle>
+                <CardDescription>AI conversations reset monthly. Human (live agent) conversations are unlimited on every plan.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {usage ? (
+                  [
+                    { label: "AI conversations", u: usage.aiConversations },
+                    { label: "Contacts stored", u: usage.contacts },
+                    { label: "AI agents", u: usage.agents },
+                    { label: "Team seats", u: usage.seats },
+                    { label: "Tickets", u: usage.tickets },
+                  ].map(({ label, u }) => {
+                    const pct = u.limit ? Math.min(100, Math.round((u.used / u.limit) * 100)) : 0;
+                    return (
+                      <div key={label} className="space-y-1.5">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-foreground">{label}</span>
+                          <span className="text-muted-foreground">
+                            {u.used}{u.limit != null ? ` / ${u.limit}` : " · Unlimited"}
+                          </span>
+                        </div>
+                        {u.limit != null && <Progress value={pct} />}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-sm text-muted-foreground">Loading usage…</p>
+                )}
               </CardContent>
             </Card>
 
@@ -785,6 +849,27 @@ export default function Settings() {
                   {!billingConfig?.stripe && !billingConfig?.cryptomus && (
                     <p className="text-sm text-muted-foreground">Online payments aren't enabled yet. Please contact support to upgrade.</p>
                   )}
+                </div>
+              </DialogContent>
+            </Dialog>
+
+            {/* Cancel-subscription confirmation */}
+            <Dialog open={confirmCancel} onOpenChange={(o) => { if (!o) setConfirmCancel(false); }}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Cancel subscription?</DialogTitle>
+                  <DialogDescription>
+                    Your {planInfo.name} plan stays active until the end of the current billing period, then automatically switches to Free. You won't be charged again and renewal is stopped.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={() => setConfirmCancel(false)} disabled={cancelSubscription.isPending}>
+                    Keep my plan
+                  </Button>
+                  <Button variant="destructive" onClick={() => cancelSubscription.mutate()} disabled={cancelSubscription.isPending}>
+                    {cancelSubscription.isPending && <Loader2 className="w-4 h-4 animate-spin mr-1.5" />}
+                    Yes, stop renewal
+                  </Button>
                 </div>
               </DialogContent>
             </Dialog>

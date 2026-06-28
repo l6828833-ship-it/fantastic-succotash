@@ -156,9 +156,18 @@ export default function Contacts() {
   const limit = (stats as { limit?: number | null } | undefined)?.limit ?? null;
   const atLimit = limit != null && (stats?.total ?? 0) >= limit;
 
+  // CSV export / segments is a paid feature (Pro and above). Free & Starter
+  // can't extract contacts. ("growth" kept for any legacy pre-rename plan.)
+  const plan = (stats as { plan?: string } | undefined)?.plan ?? "free";
+  const canExport = ["pro", "growth", "business", "enterprise"].includes(plan);
+
   // Export the currently filtered/targeted contacts as CSV so the user can take
   // their segmented audience into their own email tool.
   const exportCsv = () => {
+    if (!canExport) {
+      toast.error("CSV export is available on the Pro plan and above. Upgrade to export your contacts.");
+      return;
+    }
     if (filtered.length === 0) { toast.error("No contacts to export"); return; }
     const headers = ["Name", "Email", "Phone", "Company", "Channel", "Subscribed", "Tags", "Last Seen", "Created"];
     const esc = (v: unknown) => {
@@ -195,7 +204,7 @@ export default function Contacts() {
             <p className="text-xs text-muted-foreground">Collect leads from your bots, segment them with filters, and export to use in any email tool</p>
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={exportCsv} disabled={filtered.length === 0}>
+            <Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={exportCsv} disabled={!canExport || filtered.length === 0} title={!canExport ? "CSV export is available on Pro and above" : undefined}>
               <Download className="w-3.5 h-3.5" />Export CSV
             </Button>
             <Button size="sm" className="gap-1.5 h-8" onClick={() => setShowCreate(true)} disabled={atLimit} title={atLimit ? "You've reached your plan's contact limit" : undefined}>

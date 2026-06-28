@@ -11,6 +11,7 @@ import {
   isPurchasablePlan,
   createStripeCheckout,
   createCryptomusInvoice,
+  cancelStripeSubscription,
   PURCHASABLE_PLANS,
 } from "./_core/billing";
 import { requestBaseUrl } from "./_core/email";
@@ -1273,10 +1274,44 @@ const billingRouter = router({
     cryptomus: isCryptomusConfigured(),
     plans: PURCHASABLE_PLANS,
   })),
+  // Current-month usage vs the plan's limits, for the billing page meters.
+  // A null limit means "unlimited". Human conversations are not counted (they
+  // are unlimited on every plan) — only AI conversations count toward the cap.
+  usage: protectedProcedure.query(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    const plan = workspace?.plan ?? "free";
+    const toLimit = (n: number) => (Number.isFinite(n) ? n : null);
+    if (!workspace) {
+      return {
+        plan,
+        aiConversations: { used: 0, limit: db.conversationLimitForPlan(plan) },
+        contacts: { used: 0, limit: db.contactLimitForPlan(plan) },
+        agents: { used: 0, limit: db.agentLimitForPlan(plan) },
+        seats: { used: 1, limit: toLimit(db.teamSeatLimitForPlan(plan)) },
+        tickets: { used: 0, limit: toLimit(db.ticketLimitForPlan(plan)) },
+      };
+    }
+    const [aiConversations, contacts, agents, members, tickets] = await Promise.all([
+      db.countAiConversationsThisMonth(workspace.id),
+      db.countContactsByWorkspace(workspace.id),
+      db.countAgentsByWorkspace(workspace.id),
+      db.countTeamMembersByWorkspace(workspace.id),
+      db.countTicketsThisMonth(workspace.id),
+    ]);
+    return {
+      plan,
+      aiConversations: { used: aiConversations, limit: toLimit(db.conversationLimitForPlan(plan)) },
+      contacts: { used: contacts, limit: toLimit(db.contactLimitForPlan(plan)) },
+      agents: { used: agents, limit: toLimit(db.agentLimitForPlan(plan)) },
+      // +1 for the owner, who always occupies a seat.
+      seats: { used: members + 1, limit: toLimit(db.teamSeatLimitForPlan(plan)) },
+      tickets: { used: tickets, limit: toLimit(db.ticketLimitForPlan(plan)) },
+    };
+  }),
   // Start a checkout for the chosen plan + provider; returns a redirect URL.
   createCheckout: protectedProcedure
     .input(z.object({
-      plan: z.enum(["starter", "growth", "business"]),
+      plan: z.enum(["starter", "pro", "business"]),
       provider: z.enum(["stripe", "cryptomus"]),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -1321,6 +1356,27 @@ const billingRouter = router({
         throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message });
       }
     }),
+  // Cancel the current subscription — stops auto-renewal. The plan stays active
+  // until the end of the billing period, then a webhook downgrades to free.
+  cancelSubscription: protectedProcedure.mutation(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) throw new TRPCError({ code: "BAD_REQUEST", message: "No workspace found" });
+    if (!workspace.stripeSubscriptionId) {
+      throw new TRPCError({
+        code: "PRECONDITION_FAILED",
+        message: "No active auto-renewing subscription to cancel. Crypto plans are one-time and don't renew.",
+      });
+    }
+    try {
+      await cancelStripeSubscription(workspace.stripeSubscriptionId);
+      await db.updateWorkspace(workspace.id, { subscriptionCancelAtPeriodEnd: true });
+      return { success: true };
+    } catch (err) {
+      console.error("[Billing] cancel failed", err);
+      const message = err instanceof Error && err.message ? err.message : "Could not cancel the subscription.";
+      throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message });
+    }
+  }),
 });
 
 // ─── App Router ───────────────────────────────────────────────────────────────

@@ -348,3 +348,15 @@ CREATE TABLE IF NOT EXISTS "payments" (
   "updatedAt" timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS "payments_externalId_idx" ON "payments" ("externalId");
+
+
+-- Subscription cancellation support: store the Stripe subscription id and a
+-- "cancel at period end" flag so users can stop auto-renewal from Billing.
+ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "stripeSubscriptionId" varchar(255);
+ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "subscriptionCancelAtPeriodEnd" boolean DEFAULT false;
+
+-- Plan rename: "growth" tier was renamed to "pro". Migrate any existing rows so
+-- limits/price keep resolving. Idempotent (only affects leftover 'growth' rows).
+UPDATE "workspaces" SET "plan" = 'pro' WHERE "plan" = 'growth';
+UPDATE "payments" SET "plan" = 'pro' WHERE "plan" = 'growth';
+UPDATE "referrals" SET "plan" = 'pro' WHERE "plan" = 'growth';

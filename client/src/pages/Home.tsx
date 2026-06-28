@@ -77,10 +77,61 @@ const TESTIMONIALS = [
 ];
 
 const PLANS = [
-  { id: "free", name: "Free", price: "$0", period: "", highlight: false, blurb: "To get started", features: ["1 AI agent", "50 conversations / mo", "30 contacts stored", "Knowledge base", "Embed on any site", "Lead capture"] },
-  { id: "starter", name: "Starter", price: "$9.99", period: "/mo", highlight: false, blurb: "For small sites", features: ["2 AI agents", "1,000 conversations / mo", "1,000 contacts", "Learn from your website", "Tickets & email-to-ticket", "Premium icons + remove branding"] },
-  { id: "growth", name: "Growth", price: "$49", period: "/mo", highlight: true, blurb: "For growing teams", features: ["5 AI agents", "5,000 conversations / mo", "5,000 contacts", "Human handoff & live inbox", "Escalation rules", "Advanced analytics", "10 team seats"] },
-  { id: "business", name: "Business", price: "$129", period: "/mo", highlight: false, blurb: "For scale", features: ["15 AI agents", "20,000 conversations / mo", "25,000 contacts", "Multi-language replies", "Email branding", "25 team seats", "Priority support"] },
+  { id: "free", name: "Free", price: "$0", period: "", highlight: false, blurb: "To get started", features: [
+    "1 AI agent", "50 AI conversations / mo", "Unlimited human conversations", "30 contacts stored",
+    "30 tickets / mo (create & respond)", "Knowledge base", "Embed on any site", "Widget styling",
+    "Lead capture", "Multi-language replies", "Basic analytics", "Community support", "Affiliate program",
+  ] },
+  { id: "starter", name: "Starter", price: "$9.99", period: "/mo", highlight: false, blurb: "For small sites", features: [
+    "2 AI agents", "1,000 AI conversations / mo", "Unlimited human conversations", "1,000 contacts",
+    "Unlimited tickets (create & respond)", "Knowledge base", "Embed on any site", "Learn from your website",
+    "Widget styling", "Premium icons + remove branding", "Lead capture", "Human handoff & live inbox",
+    "Escalation rules", "Tickets & email-to-ticket", "Standard analytics", "Multi-language replies",
+    "Email support", "Affiliate program",
+  ] },
+  { id: "pro", name: "Pro", price: "$49", period: "/mo", highlight: true, blurb: "For growing teams", features: [
+    "5 AI agents", "6,000 AI conversations / mo", "Unlimited human conversations", "5,000 contacts",
+    "Unlimited tickets (create & respond)", "Knowledge base", "Embed on any site", "Learn from your website",
+    "Widget styling", "Premium icons + remove branding", "Lead capture", "Human handoff & live inbox",
+    "Escalation rules", "Tickets & email-to-ticket", "Email branding (logo / reply-to / signature)",
+    "Segments + CSV export", "Advanced analytics", "Multi-language replies", "10 team seats",
+    "Priority support", "Affiliate program",
+  ] },
+  { id: "business", name: "Business", price: "$129", period: "/mo", highlight: false, blurb: "For scale", features: [
+    "15 AI agents", "20,000 AI conversations / mo", "Unlimited human conversations", "25,000 contacts",
+    "Unlimited tickets (create & respond)", "Knowledge base", "Embed on any site", "Learn from your website",
+    "Widget styling", "Premium icons + remove branding", "Lead capture", "Human handoff & live inbox",
+    "Escalation rules", "Tickets & email-to-ticket", "Email branding (logo / reply-to / signature)",
+    "Segments + CSV export", "Advanced analytics + export", "Multi-language replies", "25 team seats",
+    "Priority support + onboarding", "Affiliate program",
+  ] },
+];
+
+// Full feature comparison across plans (incl. Enterprise). "✓" = included,
+// "—" = not included. Shown in the comparison table under the pricing cards.
+const COMPARE_COLS = ["Free", "Starter", "Pro", "Business", "Enterprise"];
+const COMPARE_ROWS: { label: string; values: string[] }[] = [
+  { label: "AI agents", values: ["1", "2", "5", "15", "Unlimited"] },
+  { label: "AI conversations / mo", values: ["50", "1,000", "6,000", "20,000", "Unlimited"] },
+  { label: "Human conversations", values: ["Unlimited", "Unlimited", "Unlimited", "Unlimited", "Unlimited"] },
+  { label: "Contacts stored", values: ["30", "1,000", "5,000", "25,000", "Unlimited"] },
+  { label: "Tickets (create & respond)", values: ["30 / mo", "Unlimited", "Unlimited", "Unlimited", "Unlimited"] },
+  { label: "Team seats", values: ["1", "2", "10", "25", "Unlimited"] },
+  { label: "Knowledge base (Q&A + articles)", values: ["✓", "✓", "✓", "✓", "✓"] },
+  { label: "Embed on any site", values: ["✓", "✓", "✓", "✓", "✓"] },
+  { label: "Learn from website URL", values: ["—", "✓", "✓", "✓", "✓"] },
+  { label: "Widget styling (color/position/theme/size/font)", values: ["✓", "✓", "✓", "✓", "✓"] },
+  { label: "Premium launcher icons", values: ["—", "✓", "✓", "✓", "✓"] },
+  { label: 'Remove "Powered by Chatrico"', values: ["—", "✓", "✓", "✓", "✓"] },
+  { label: "Lead capture", values: ["✓", "✓", "✓", "✓", "✓"] },
+  { label: "Email-to-ticket + reply portal", values: ["✓", "✓", "✓", "✓", "✓"] },
+  { label: "Human handoff / live Inbox + escalation", values: ["—", "✓", "✓", "✓", "✓"] },
+  { label: "Email branding (logo/reply-to/signature)", values: ["—", "—", "✓", "✓", "✓"] },
+  { label: "Segments + CSV export", values: ["—", "—", "✓", "✓", "✓"] },
+  { label: "Analytics", values: ["Basic", "Standard", "Advanced", "Advanced + export", "Advanced + export"] },
+  { label: "Multi-language replies", values: ["✓", "✓", "✓", "✓", "✓"] },
+  { label: "Support", values: ["Community", "Email", "Priority", "Priority + onboarding", "SLA + dedicated"] },
+  { label: "Affiliate program", values: ["✓", "✓", "✓", "✓", "✓"] },
 ];
 
 const FAQS = [
@@ -413,6 +464,45 @@ export default function Home() {
                 </Link>
               </div>
             ))}
+          </div>
+
+          {/* Feature comparison table */}
+          <div className="mt-14">
+            <h3 className="text-center text-xl sm:text-2xl font-bold tracking-tight">Compare all features</h3>
+            <p className="text-center text-sm text-muted-foreground mt-2">Everything included in each plan, side by side.</p>
+            <div className="mt-6 overflow-x-auto rounded-2xl border border-border bg-card">
+              <table className="w-full min-w-[720px] text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left font-semibold p-4 sticky left-0 bg-card">Feature</th>
+                    {COMPARE_COLS.map((c) => (
+                      <th key={c} className={"text-center font-semibold p-4 " + (c === "Pro" ? "text-primary" : "")}>{c}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {COMPARE_ROWS.map((row, i) => (
+                    <tr key={row.label} className={"border-b border-border/60 " + (i % 2 ? "bg-muted/20" : "")}>
+                      <td className="p-4 text-foreground sticky left-0 bg-inherit">{row.label}</td>
+                      {row.values.map((v, idx) => (
+                        <td key={idx} className="p-4 text-center">
+                          {v === "✓" ? (
+                            <Check className="w-4 h-4 text-green-500 mx-auto" />
+                          ) : v === "—" ? (
+                            <span className="text-muted-foreground/50">—</span>
+                          ) : (
+                            <span className={COMPARE_COLS[idx] === "Pro" ? "font-medium text-foreground" : "text-muted-foreground"}>{v}</span>
+                          )}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-center text-xs text-muted-foreground mt-4">
+              Human (live agent) conversations are unlimited on every plan — only AI replies count toward your monthly limit.
+            </p>
           </div>
         </div>
       </section>

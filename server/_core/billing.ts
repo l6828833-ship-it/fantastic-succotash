@@ -7,12 +7,12 @@ import { creditReferralForUpgrade } from "./referral";
 
 // Plans that can be purchased (the free tier and admin-only enterprise are not
 // self-serve). Labels are shown on the Stripe/Cryptomus checkout pages.
-export const PURCHASABLE_PLANS = ["starter", "growth", "business"] as const;
+export const PURCHASABLE_PLANS = ["starter", "pro", "business"] as const;
 export type PurchasablePlan = (typeof PURCHASABLE_PLANS)[number];
 
 const PLAN_LABELS: Record<string, string> = {
   starter: "Chatrico Starter",
-  growth: "Chatrico Growth",
+  pro: "Chatrico Pro",
   business: "Chatrico Business",
 };
 
@@ -102,8 +102,28 @@ export async function createStripeCheckout(opts: {
   return { url: data.url, id: data.id };
 }
 
-// Verify a Stripe webhook signature (the "stripe-signature" header) against the
-// raw request body, without the SDK. Returns the parsed event or null.
+// Cancel a Stripe subscription at the end of the current billing period (stops
+// auto-renewal but keeps the plan active until the period ends). The eventual
+// customer.subscription.deleted webhook downgrades the workspace to free.
+export async function cancelStripeSubscription(subscriptionId: string): Promise<void> {
+  if (!looksLikeStripeSecretKey(ENV.stripeSecretKey)) {
+    throw new Error("Stripe is not configured.");
+  }
+  const form = new URLSearchParams();
+  form.set("cancel_at_period_end", "true");
+  const resp = await fetch(`https://api.stripe.com/v1/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${ENV.stripeSecretKey}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: form.toString(),
+  });
+  const data = (await resp.json()) as { error?: { message?: string } };
+  if (!resp.ok) {
+    throw new Error(data.error?.message || "Failed to cancel the subscription.");
+  }
+}
 function verifyStripeEvent(rawBody: Buffer, sigHeader: string | undefined): any | null {
   if (!sigHeader || !ENV.stripeWebhookSecret) return null;
   const parts = Object.fromEntries(
@@ -223,6 +243,13 @@ export function registerBillingRoutes(app: Express) {
         const plan = String(session.metadata?.plan ?? "");
         if (workspaceId && plan && isPurchasablePlan(plan)) {
           await activatePlan(workspaceId, plan);
+          // Remember the subscription so the user can cancel/stop renewal later.
+          if (session.subscription) {
+            await db.updateWorkspace(workspaceId, {
+              stripeSubscriptionId: String(session.subscription),
+              subscriptionCancelAtPeriodEnd: false,
+            }).catch(() => {});
+          }
           if (session.id) {
             const pay = await db.getPaymentByExternalId(String(session.id));
             if (pay) await db.updatePayment(pay.id, { status: "paid" });
@@ -233,7 +260,7 @@ export function registerBillingRoutes(app: Express) {
         const sub = event.data?.object ?? {};
         const workspaceId = Number(sub.metadata?.workspaceId);
         if (workspaceId) {
-          await db.updateWorkspace(workspaceId, { plan: "free" });
+          await db.updateWorkspace(workspaceId, { plan: "free", stripeSubscriptionId: null, subscriptionCancelAtPeriodEnd: false });
           console.log(`[Billing] Stripe subscription cancelled, workspace=${workspaceId} downgraded to free`);
         }
       }

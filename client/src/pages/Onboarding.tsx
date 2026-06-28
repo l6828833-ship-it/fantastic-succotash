@@ -49,10 +49,10 @@ const FEATURES = [
 ];
 
 const PLANS = [
-  { id: "free", label: "Free", price: "$0", features: ["1 AI Agent", "50 conversations/mo", "30 contacts"], highlight: false },
-  { id: "starter", label: "Starter", price: "$9.99/mo", features: ["2 AI Agents", "1,000 conversations/mo", "Tickets", "Remove branding"], highlight: false },
-  { id: "growth", label: "Growth", price: "$49/mo", features: ["5 AI Agents", "5,000 conversations/mo", "Advanced analytics", "Human handoff"], highlight: true },
-  { id: "business", label: "Business", price: "$129/mo", features: ["15 AI Agents", "20,000 conversations/mo", "Multi-language", "25 seats"], highlight: false },
+  { id: "free", label: "Free", price: "$0", features: ["1 AI Agent", "50 AI conversations/mo", "Unlimited human chats", "30 contacts"], highlight: false },
+  { id: "starter", label: "Starter", price: "$9.99/mo", features: ["2 AI Agents", "1,000 AI conversations/mo", "Unlimited tickets", "Remove branding"], highlight: false },
+  { id: "pro", label: "Pro", price: "$49/mo", features: ["5 AI Agents", "6,000 AI conversations/mo", "Advanced analytics", "Human handoff"], highlight: true },
+  { id: "business", label: "Business", price: "$129/mo", features: ["15 AI Agents", "20,000 AI conversations/mo", "Multi-language", "25 seats"], highlight: false },
 ];
 
 const steps = [

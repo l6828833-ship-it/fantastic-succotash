@@ -731,49 +731,69 @@ export async function getContactsByWorkspace(workspaceId: number) {
   return db.select().from(contacts).where(eq(contacts.workspaceId, workspaceId)).orderBy(desc(contacts.updatedAt));
 }
 
+// Legacy alias: the "growth" plan was renamed to "pro". Normalize any old
+// stored/legacy value so it still resolves to the right limits and price.
+export function normalizePlan(plan?: string | null): string {
+  if (!plan) return "free";
+  return plan === "growth" ? "pro" : plan;
+}
+
 // Per-plan contact storage limits. Use Infinity for "unlimited". Keep plan ids
 // in sync with CONVERSATION_LIMITS / TEAM_SEAT_LIMITS / AGENT_LIMITS /
 // PLAN_PRICE_CENTS and the public plan lists.
 export const CONTACT_LIMITS: Record<string, number> = {
   free: 30,
   starter: 1000,
-  growth: 5000,
+  pro: 5000,
   business: 25000,
   enterprise: Number.POSITIVE_INFINITY,
 };
 
 export function contactLimitForPlan(plan?: string | null): number {
-  if (!plan) return CONTACT_LIMITS.free;
-  return CONTACT_LIMITS[plan] ?? CONTACT_LIMITS.free;
+  return CONTACT_LIMITS[normalizePlan(plan)] ?? CONTACT_LIMITS.free;
 }
 
-// Per-plan monthly conversation (chat thread) limits. A conversation is one
-// visitor chat thread; it can contain many messages. Counted per calendar month.
+// Per-plan monthly AI-conversation limits. A conversation is one visitor chat
+// thread. Only AI-handled threads count toward this cap — once a conversation
+// is escalated to a human it no longer counts, so human conversations are
+// effectively UNLIMITED on every plan. Counted per calendar month.
 export const CONVERSATION_LIMITS: Record<string, number> = {
   free: 50,
   starter: 1000,
-  growth: 5000,
+  pro: 6000,
   business: 20000,
   enterprise: Number.POSITIVE_INFINITY,
 };
 
 export function conversationLimitForPlan(plan?: string | null): number {
-  if (!plan) return CONVERSATION_LIMITS.free;
-  return CONVERSATION_LIMITS[plan] ?? CONVERSATION_LIMITS.free;
+  return CONVERSATION_LIMITS[normalizePlan(plan)] ?? CONVERSATION_LIMITS.free;
+}
+
+// Per-plan monthly support-ticket creation limits. Free includes 30 tickets/mo
+// (create & respond); all paid plans are unlimited. Use Infinity for unlimited.
+export const TICKET_LIMITS: Record<string, number> = {
+  free: 30,
+  starter: Number.POSITIVE_INFINITY,
+  pro: Number.POSITIVE_INFINITY,
+  business: Number.POSITIVE_INFINITY,
+  enterprise: Number.POSITIVE_INFINITY,
+};
+
+export function ticketLimitForPlan(plan?: string | null): number {
+  return TICKET_LIMITS[normalizePlan(plan)] ?? TICKET_LIMITS.free;
 }
 
 // Per-plan limit on how many AI agents a workspace can create.
 export const AGENT_LIMITS: Record<string, number> = {
   free: 1,
   starter: 2,
-  growth: 5,
+  pro: 5,
   business: 15,
   enterprise: Number.POSITIVE_INFINITY,
 };
 
 export function agentLimitForPlan(plan?: string | null): number {
-  if (!plan) return AGENT_LIMITS.free;
-  return AGENT_LIMITS[plan] ?? AGENT_LIMITS.free;
+  return AGENT_LIMITS[normalizePlan(plan)] ?? AGENT_LIMITS.free;
 }
 
 // Count conversations created in the current calendar month for a workspace.
@@ -786,6 +806,41 @@ export async function countConversationsThisMonth(workspaceId: number): Promise<
     .select({ count: sql<number>`count(*)` })
     .from(conversations)
     .where(and(eq(conversations.workspaceId, workspaceId), gte(conversations.createdAt, startOfMonth)));
+  return Number(result[0]?.count ?? 0);
+}
+
+// Count AI-handled conversations this month (excludes any thread escalated to a
+// human). This is what the monthly plan cap is measured against, so human
+// conversations never count and are effectively unlimited on every plan.
+export async function countAiConversationsThisMonth(workspaceId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const now = new Date();
+  const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(conversations)
+    .where(
+      and(
+        eq(conversations.workspaceId, workspaceId),
+        gte(conversations.createdAt, startOfMonth),
+        eq(conversations.isEscalated, false),
+      ),
+    );
+  return Number(result[0]?.count ?? 0);
+}
+
+// Count support tickets created in the current calendar month for a workspace
+// (for the monthly ticket-limit enforcement).
+export async function countTicketsThisMonth(workspaceId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const now = new Date();
+  const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(tickets)
+    .where(and(eq(tickets.workspaceId, workspaceId), gte(tickets.createdAt, startOfMonth)));
   return Number(result[0]?.count ?? 0);
 }
 
@@ -885,14 +940,13 @@ export async function getContactStats(workspaceId: number) {
 export const TEAM_SEAT_LIMITS: Record<string, number> = {
   free: 1,
   starter: 2,
-  growth: 10,
+  pro: 10,
   business: 25,
   enterprise: Number.POSITIVE_INFINITY,
 };
 
 export function teamSeatLimitForPlan(plan?: string | null): number {
-  if (!plan) return TEAM_SEAT_LIMITS.free;
-  return TEAM_SEAT_LIMITS[plan] ?? TEAM_SEAT_LIMITS.free;
+  return TEAM_SEAT_LIMITS[normalizePlan(plan)] ?? TEAM_SEAT_LIMITS.free;
 }
 
 export async function getTeamMembersByWorkspace(workspaceId: number) {
@@ -963,14 +1017,14 @@ export function commissionRateForReferrals(count: number): number {
 export const PLAN_PRICE_CENTS: Record<string, number> = {
   free: 0,
   starter: 999,
-  growth: 4900,
+  pro: 4900,
   business: 12900,
   enterprise: 0,
 };
 
 export function planPriceCents(plan?: string | null): number {
   if (!plan) return 0;
-  return PLAN_PRICE_CENTS[plan] ?? 0;
+  return PLAN_PRICE_CENTS[normalizePlan(plan)] ?? 0;
 }
 
 // ─── Payments ─────────────────────────────────────────────────────────────────
