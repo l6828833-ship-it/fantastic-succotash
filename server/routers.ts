@@ -1294,6 +1294,77 @@ const adminRouter = router({
   affiliateReferrals: adminProcedure
     .input(z.object({ affiliateId: z.number() }))
     .query(async ({ input }) => db.getReferralsByAffiliate(input.affiliateId)),
+
+  // ─── Billing log: every payment/transaction across all workspaces ───────────
+  payments: adminProcedure.query(async () => {
+    const [pays, allWs, allUsers] = await Promise.all([db.getAllPayments(), db.getAllWorkspaces(), db.getAllUsers()]);
+    const wsMap = new Map(allWs.map((w) => [w.id, w]));
+    const userMap = new Map(allUsers.map((u) => [u.id, u]));
+    return pays.map((p) => {
+      const ws = wsMap.get(p.workspaceId);
+      const owner = ws ? userMap.get(ws.userId) : undefined;
+      return {
+        ...p,
+        workspaceName: ws?.companyName ?? null,
+        ownerEmail: owner?.email ?? null,
+      };
+    });
+  }),
+
+  // ─── Per-workspace usage vs plan limits (null limit = unlimited) ────────────
+  usage: adminProcedure.query(async () => {
+    const [allWs, allUsers, counts] = await Promise.all([
+      db.getAllWorkspaces(),
+      db.getAllUsers(),
+      db.getUsageCountsByWorkspace(),
+    ]);
+    const userMap = new Map(allUsers.map((u) => [u.id, u]));
+    const lim = (n: number) => (Number.isFinite(n) ? n : null);
+    return allWs.map((w) => {
+      const owner = userMap.get(w.userId);
+      const plan = w.plan ?? "free";
+      return {
+        workspaceId: w.id,
+        workspaceName: w.companyName ?? null,
+        ownerEmail: owner?.email ?? null,
+        ownerName: owner?.name ?? null,
+        plan,
+        aiConversations: { used: counts.aiConversations.get(w.id) ?? 0, limit: lim(db.conversationLimitForPlan(plan)) },
+        contacts: { used: counts.contacts.get(w.id) ?? 0, limit: lim(db.contactLimitForPlan(plan)) },
+        agents: { used: counts.agents.get(w.id) ?? 0, limit: lim(db.agentLimitForPlan(plan)) },
+        seats: { used: (counts.seats.get(w.id) ?? 0) + 1, limit: lim(db.teamSeatLimitForPlan(plan)) },
+        tickets: { used: counts.tickets.get(w.id) ?? 0, limit: lim(db.ticketLimitForPlan(plan)) },
+      };
+    });
+  }),
+
+  // ─── Activity log: recent platform events (signups + billing) ───────────────
+  activity: adminProcedure.query(async () => {
+    const [recentUsers, pays, allWs] = await Promise.all([
+      db.getAllUsers(100),
+      db.getAllPayments(100),
+      db.getAllWorkspaces(),
+    ]);
+    const wsMap = new Map(allWs.map((w) => [w.id, w]));
+    const userMap = new Map(recentUsers.map((u) => [u.id, u]));
+    type Item = { type: string; title: string; detail: string; at: string | Date };
+    const items: Item[] = [];
+    for (const u of recentUsers) {
+      items.push({ type: "signup", title: "New sign-up", detail: u.email ?? u.name ?? `user #${u.id}`, at: u.createdAt });
+    }
+    for (const p of pays) {
+      const ws = wsMap.get(p.workspaceId);
+      const owner = ws ? userMap.get(ws.userId) : undefined;
+      items.push({
+        type: `payment_${p.status ?? "pending"}`,
+        title: `Payment ${p.status ?? "pending"}`,
+        detail: `${owner?.email ?? ws?.companyName ?? `workspace #${p.workspaceId}`} · ${p.plan} · ${p.provider} · $${((p.amountCents ?? 0) / 100).toFixed(2)}`,
+        at: p.createdAt,
+      });
+    }
+    items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+    return items.slice(0, 120);
+  }),
 });
 
 // ─── Billing Router ───────────────────────────────────────────────────────────

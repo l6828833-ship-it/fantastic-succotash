@@ -2,7 +2,7 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
-import { Shield, Users, Building2, Bot, MessageSquare, Ticket, Contact, ShieldCheck, ShieldOff, Gift, Wallet, Check, X, DollarSign, Eye } from "lucide-react";
+import { Shield, Users, Building2, Bot, MessageSquare, Ticket, Contact, ShieldCheck, ShieldOff, Gift, Wallet, Check, X, DollarSign, Eye, CreditCard, Activity, Gauge } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +50,9 @@ export default function Admin() {
 
   const { data: affiliates = [] } = trpc.admin.affiliates.useQuery(undefined, { enabled: isAdmin });
   const { data: payouts = [] } = trpc.admin.payouts.useQuery(undefined, { enabled: isAdmin });
+  const { data: payments = [] } = trpc.admin.payments.useQuery(undefined, { enabled: isAdmin });
+  const { data: usageRows = [] } = trpc.admin.usage.useQuery(undefined, { enabled: isAdmin });
+  const { data: activity = [] } = trpc.admin.activity.useQuery(undefined, { enabled: isAdmin });
   const [adjDrafts, setAdjDrafts] = useState<Record<number, string>>({});
   const [viewAff, setViewAff] = useState<{ id: number; label: string } | null>(null);
   const { data: affReferrals = [] } = trpc.admin.affiliateReferrals.useQuery(
@@ -90,6 +93,17 @@ export default function Admin() {
   const money = (c?: number | null) => `$${((c ?? 0) / 100).toFixed(2)}`;
   const pendingPayouts = payoutList.filter((p) => p.status === "pending").length;
 
+  type Pay = { id: number; provider: string; plan: string; status?: string | null; amountCents?: number | null; externalId?: string | null; createdAt: string | Date; workspaceName?: string | null; ownerEmail?: string | null };
+  type Usage = { used: number; limit: number | null };
+  type UsageRow = { workspaceId: number; workspaceName?: string | null; ownerEmail?: string | null; ownerName?: string | null; plan: string; aiConversations: Usage; contacts: Usage; agents: Usage; seats: Usage; tickets: Usage };
+  type ActivityItem = { type: string; title: string; detail: string; at: string | Date };
+  const payList = payments as Pay[];
+  const usageList = usageRows as UsageRow[];
+  const activityList = activity as ActivityItem[];
+  const fmtDateTime = (d?: string | Date | null) => (d ? new Date(d).toLocaleString() : "—");
+  const cell = (u: Usage) => `${u.used}${u.limit != null ? ` / ${u.limit}` : " / ∞"}`;
+  const paidTotal = payList.filter((p) => p.status === "paid").reduce((s, p) => s + (p.amountCents ?? 0), 0);
+
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
       <div className="flex items-center gap-3">
@@ -117,6 +131,9 @@ export default function Admin() {
           <TabsTrigger value="workspaces" className="gap-1.5 text-xs"><Building2 className="w-3.5 h-3.5" />Workspaces ({wsList.length})</TabsTrigger>
           <TabsTrigger value="affiliates" className="gap-1.5 text-xs"><Gift className="w-3.5 h-3.5" />Affiliates ({affList.length})</TabsTrigger>
           <TabsTrigger value="payouts" className="gap-1.5 text-xs"><Wallet className="w-3.5 h-3.5" />Payouts{pendingPayouts > 0 ? ` (${pendingPayouts})` : ""}</TabsTrigger>
+          <TabsTrigger value="billing" className="gap-1.5 text-xs"><CreditCard className="w-3.5 h-3.5" />Billing ({payList.length})</TabsTrigger>
+          <TabsTrigger value="usage" className="gap-1.5 text-xs"><Gauge className="w-3.5 h-3.5" />Usage</TabsTrigger>
+          <TabsTrigger value="activity" className="gap-1.5 text-xs"><Activity className="w-3.5 h-3.5" />Activity</TabsTrigger>
         </TabsList>
 
         <TabsContent value="users" className="mt-4">
@@ -329,6 +346,112 @@ export default function Admin() {
                   ))}
                 </tbody>
               </table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        <TabsContent value="billing" className="mt-4">
+          <Card className="border-border">
+            <CardContent className="p-4 flex items-center gap-2 border-b border-border">
+              <DollarSign className="w-4 h-4 text-green-600" />
+              <p className="text-sm text-muted-foreground">Total collected (paid): <span className="font-semibold text-foreground">{money(paidTotal)}</span> · {payList.length} transactions</p>
+            </CardContent>
+            <CardContent className="p-0 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40">
+                  <tr className="text-left text-xs text-muted-foreground">
+                    <th className="px-4 py-2.5 font-medium">Date</th>
+                    <th className="px-3 py-2.5 font-medium">Workspace / Owner</th>
+                    <th className="px-3 py-2.5 font-medium">Plan</th>
+                    <th className="px-3 py-2.5 font-medium hidden sm:table-cell">Provider</th>
+                    <th className="px-3 py-2.5 font-medium">Amount</th>
+                    <th className="px-3 py-2.5 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payList.length === 0 ? (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No transactions yet</td></tr>
+                  ) : payList.map((p) => (
+                    <tr key={p.id} className="border-t border-border">
+                      <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{fmtDateTime(p.createdAt)}</td>
+                      <td className="px-3 py-2.5">
+                        <p className="font-medium text-foreground">{p.workspaceName ?? "Workspace"}</p>
+                        <p className="text-xs text-muted-foreground">{p.ownerEmail ?? "—"}</p>
+                      </td>
+                      <td className="px-3 py-2.5 capitalize text-foreground">{p.plan}</td>
+                      <td className="px-3 py-2.5 capitalize text-muted-foreground hidden sm:table-cell">{p.provider}</td>
+                      <td className="px-3 py-2.5 font-medium text-foreground">{money(p.amountCents)}</td>
+                      <td className="px-3 py-2.5">
+                        <Badge variant="outline" className={cn(
+                          "text-xs capitalize",
+                          p.status === "paid" && "bg-green-500/10 text-green-600 border-green-200",
+                          (!p.status || p.status === "pending") && "bg-amber-500/10 text-amber-600 border-amber-200",
+                          p.status === "failed" && "bg-red-500/10 text-red-600 border-red-200",
+                        )}>{p.status ?? "pending"}</Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="usage" className="mt-4">
+          <Card className="border-border">
+            <CardContent className="p-0 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40">
+                  <tr className="text-left text-xs text-muted-foreground">
+                    <th className="px-4 py-2.5 font-medium">Workspace / Owner</th>
+                    <th className="px-3 py-2.5 font-medium">Plan</th>
+                    <th className="px-3 py-2.5 font-medium">AI conv / mo</th>
+                    <th className="px-3 py-2.5 font-medium">Contacts</th>
+                    <th className="px-3 py-2.5 font-medium hidden sm:table-cell">Agents</th>
+                    <th className="px-3 py-2.5 font-medium hidden sm:table-cell">Seats</th>
+                    <th className="px-3 py-2.5 font-medium hidden md:table-cell">Tickets / mo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {usageList.length === 0 ? (
+                    <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No workspaces</td></tr>
+                  ) : usageList.map((w) => (
+                    <tr key={w.workspaceId} className="border-t border-border">
+                      <td className="px-4 py-2.5">
+                        <p className="font-medium text-foreground">{w.workspaceName ?? `Workspace #${w.workspaceId}`}</p>
+                        <p className="text-xs text-muted-foreground">{w.ownerEmail ?? "—"}</p>
+                      </td>
+                      <td className="px-3 py-2.5"><Badge variant="secondary" className="text-xs capitalize">{w.plan}</Badge></td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{cell(w.aiConversations)}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{cell(w.contacts)}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground hidden sm:table-cell">{cell(w.agents)}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground hidden sm:table-cell">{cell(w.seats)}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground hidden md:table-cell">{cell(w.tickets)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </CardContent>
+          </Card>
+          <p className="text-xs text-muted-foreground mt-2">Usage is current calendar month for conversations/tickets; contacts, agents and seats are totals. "∞" = unlimited on the plan.</p>
+        </TabsContent>
+
+        <TabsContent value="activity" className="mt-4">
+          <Card className="border-border">
+            <CardContent className="p-0">
+              <div className="divide-y divide-border">
+                {activityList.length === 0 ? (
+                  <p className="px-4 py-8 text-center text-muted-foreground text-sm">No recent activity</p>
+                ) : activityList.map((a, i) => (
+                  <div key={i} className="px-4 py-3 flex items-center gap-3">
+                    <div className={cn("w-2 h-2 rounded-full shrink-0", a.type.startsWith("payment") ? "bg-green-500" : "bg-blue-500")} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{a.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">{a.detail}</p>
+                    </div>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">{fmtDateTime(a.at)}</span>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

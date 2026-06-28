@@ -1069,6 +1069,13 @@ export async function updatePayment(id: number, data: Partial<typeof payments.$i
   await db.update(payments).set({ ...data, updatedAt: new Date() }).where(eq(payments.id, id));
 }
 
+// All payments across the platform (billing log), newest first.
+export async function getAllPayments(limit = 500) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(payments).orderBy(desc(payments.createdAt)).limit(limit);
+}
+
 export async function getAffiliateByUserId(userId: number) {
   const db = await getDb();
   if (!db) return undefined;
@@ -1204,6 +1211,41 @@ export async function getPlatformStats() {
     conversations: await one(conversations),
     tickets: await one(tickets),
     contacts: await one(contacts),
+  };
+}
+
+// Per-workspace usage counts for the admin usage view. Uses GROUP BY so it's a
+// handful of queries regardless of how many workspaces exist.
+export async function getUsageCountsByWorkspace() {
+  const empty = {
+    agents: new Map<number, number>(),
+    contacts: new Map<number, number>(),
+    aiConversations: new Map<number, number>(),
+    tickets: new Map<number, number>(),
+    seats: new Map<number, number>(),
+  };
+  const db = await getDb();
+  if (!db) return empty;
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const toMap = (rows: Array<{ wid: number | null; c: number }>) =>
+    new Map(rows.map((r) => [Number(r.wid), Number(r.c)]));
+  const [ag, ct, convo, tk, tm] = await Promise.all([
+    db.select({ wid: agents.workspaceId, c: sql<number>`count(*)` }).from(agents).groupBy(agents.workspaceId),
+    db.select({ wid: contacts.workspaceId, c: sql<number>`count(*)` }).from(contacts).groupBy(contacts.workspaceId),
+    db.select({ wid: conversations.workspaceId, c: sql<number>`count(*)` }).from(conversations)
+      .where(and(gte(conversations.createdAt, monthStart), eq(conversations.isEscalated, false)))
+      .groupBy(conversations.workspaceId),
+    db.select({ wid: tickets.workspaceId, c: sql<number>`count(*)` }).from(tickets)
+      .where(gte(tickets.createdAt, monthStart)).groupBy(tickets.workspaceId),
+    db.select({ wid: teamMembers.workspaceId, c: sql<number>`count(*)` }).from(teamMembers).groupBy(teamMembers.workspaceId),
+  ]);
+  return {
+    agents: toMap(ag),
+    contacts: toMap(ct),
+    aiConversations: toMap(convo),
+    tickets: toMap(tk),
+    seats: toMap(tm),
   };
 }
 
