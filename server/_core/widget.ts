@@ -163,10 +163,10 @@ const WIDGET_JS = `(function(){
       + ".cbp-lead .cbp-err{color:#ef4444;font-size:12px;min-height:14px;}"
       + ".cbp-head .cbp-ticket{margin-left:auto;background:none;border:none;color:" + fgOn + ";cursor:pointer;opacity:.9;display:flex;align-items:center;justify-content:center;padding:0;}"
       + ".cbp-head .cbp-ticket:hover{opacity:1;}"
-      + ".cbp-head .cbp-ticket svg{width:20px;height:20px;fill:" + fgOn + ";}"
+      + ".cbp-head .cbp-ticket svg{height:16px;width:auto;fill:" + fgOn + ";}"
       + ".cbp-offer-btn{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;border:none;border-radius:10px;color:" + fgOn + ";padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.12);}"
       + ".cbp-offer-btn:hover{filter:brightness(1.06);}"
-      + ".cbp-offer-btn svg{width:15px;height:15px;fill:" + fgOn + ";}"
+      + ".cbp-offer-btn svg{height:14px;width:auto;fill:" + fgOn + ";}"
       + ".cbp-lead textarea{width:100%;box-sizing:border-box;border:1px solid " + border + ";background:" + bg + ";color:" + fg + ";border-radius:10px;padding:10px 12px;font-size:14px;outline:none;resize:vertical;min-height:84px;font-family:inherit;}";
   }
 
@@ -216,8 +216,9 @@ const WIDGET_JS = `(function(){
   var closeBtn = document.createElement("button");
   closeBtn.className = "cbp-x";
   closeBtn.innerHTML = "&times;";
-  // Clean, modern ticket icon (filled, so it inherits fill:#fff via CSS).
-  var TICKET_SVG = '<svg viewBox="0 0 24 24"><path d="M4 5h16a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V7a2 2 0 0 1 2-2zm5 4a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2H9zm0 4a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2H9z"/></svg>';
+  // Clean, modern ticket icon (no hardcoded fill, so it inherits the adaptive
+  // fgOn color set via CSS — i.e. it follows the chat's color/theme).
+  var TICKET_SVG = '<svg viewBox="0 -4 40 40"><path d="M39.5 23h0.5v1c-0.299 0-0.628 0-1 0-1.104 0-2 0.896-2 2 0 0.366 0 0.705 0 1h-34c0-0.295 0-0.634 0-1 0-1.104-0.896-2-2-2-0.319 0-0.666 0-1 0v-1h0.5c0.276 0 0.5-0.224 0.5-0.5s-0.224-0.5-0.5-0.5h-0.5v-1h0.5c0.276 0 0.5-0.224 0.5-0.5s-0.224-0.5-0.5-0.5h-0.5v-1h0.5c0.276 0 0.5-0.224 0.5-0.5s-0.224-0.5-0.5-0.5h-0.5v-1h0.5c0.276 0 0.5-0.224 0.5-0.5s-0.224-0.5-0.5-0.5h-0.5v-1h0.5c0.276 0 0.5-0.224 0.5-0.5s-0.224-0.5-0.5-0.5h-0.5v-1h0.5c0.276 0 0.5-0.224 0.5-0.5s-0.224-0.5-0.5-0.5h-0.5v-1h0.5c0.276 0 0.5-0.224 0.5-0.5s-0.224-0.5-0.5-0.5h-0.5v-1c0.299 0 0.628 0 1 0 1.104 0 2-0.896 2-2 0-0.366 0-0.705 0-1h34c0 0.295 0 0.634 0 1 0 1.104 0.896 2 2 2 0.372 0 0.701 0 1 0v1h-0.5c-0.276 0-0.5 0.224-0.5 0.5s0.224 0.5 0.5 0.5h0.5v1h-0.5c-0.276 0-0.5 0.224-0.5 0.5s0.224 0.5 0.5 0.5h0.5v1h-0.5c-0.276 0-0.5 0.224-0.5 0.5s0.224 0.5 0.5 0.5h0.5v1h-0.5c-0.276 0-0.5 0.224-0.5 0.5s0.224 0.5 0.5 0.5h0.5v1h-0.5c-0.276 0-0.5 0.224-0.5 0.5s0.224 0.5 0.5 0.5h0.5v1h-0.5c-0.276 0-0.5 0.224-0.5 0.5s0.224 0.5 0.5 0.5h0.5v1h-0.5c-0.276 0-0.5 0.224-0.5 0.5s0.224 0.5 0.5 0.5zM36 11c0-1.104-0.896-2-2-2h-28c-1.104 0-2 0.896-2 2v11c0 1.104 0.896 2 2 2h28c1.104 0 2-0.896 2-2v-11zM34 23h-28c-0.553 0-1-0.448-1-1v-11c0-0.553 0.447-1 1-1h28c0.552 0 1 0.447 1 1v11c0 0.552-0.448 1-1 1zM11.387 13.988h-3.973v0.59h1.652v4.422h0.664v-4.422h1.656v-0.59zM12.768 13.988h-0.664v5.012h0.664v-5.012zM14.759 15.49c0.104-0.312 0.287-0.56 0.546-0.744 0.258-0.185 0.58-0.277 0.965-0.277 0.335 0 0.613 0.083 0.834 0.25 0.222 0.166 0.39 0.432 0.506 0.797l0.652-0.154c-0.134-0.462-0.372-0.821-0.714-1.076s-0.764-0.383-1.265-0.383c-0.442 0-0.847 0.101-1.215 0.303s-0.651 0.497-0.852 0.886c-0.199 0.389-0.299 0.844-0.299 1.365 0 0.479 0.089 0.927 0.266 1.344s0.434 0.736 0.771 0.956c0.339 0.22 0.778 0.33 1.318 0.33 0.521 0 0.963-0.143 1.324-0.429s0.611-0.701 0.75-1.246l-0.664-0.168c-0.091 0.422-0.266 0.74-0.522 0.955-0.258 0.214-0.571 0.321-0.943 0.321-0.305 0-0.589-0.079-0.851-0.236s-0.455-0.395-0.579-0.713-0.187-0.69-0.187-1.117c0.002-0.332 0.054-0.653 0.159-0.964zM23.363 13.988h-0.898l-2.488 2.48v-2.48h-0.664v5.012h0.664v-1.738l0.822-0.795 1.783 2.533h0.875l-2.195-2.98 2.101-2.032zM27.938 18.41h-3.074v-1.707h2.77v-0.59h-2.77v-1.535h2.957v-0.59h-3.621v5.012h3.738v-0.59zM32.625 13.988h-3.973v0.59h1.652v4.422h0.664v-4.422h1.656v-0.59z"/></svg>';
   var ticketBtn = document.createElement("button");
   ticketBtn.className = "cbp-ticket";
   ticketBtn.setAttribute("title", "Open a ticket");
