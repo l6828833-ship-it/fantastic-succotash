@@ -265,7 +265,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
           const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
           const canUpgrade = !["business", "enterprise"].includes(plan);
           return (
-            <Link href="/settings">
+            <Link href="/settings?tab=billing">
               <div className="mb-3 rounded-lg border border-sidebar-border bg-sidebar-accent/40 p-3 cursor-pointer hover:bg-sidebar-accent transition-colors" onClick={onClose}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-xs text-sidebar-foreground/60">Current plan</span>
