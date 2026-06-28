@@ -12,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
-const PLAN_OPTIONS = ["starter", "growth", "enterprise"];
+const PLAN_OPTIONS = ["free", "starter", "growth", "business", "enterprise"];
 
 function StatCard({ label, value, icon: Icon }: { label: string; value: number; icon: React.ElementType }) {
   return (
@@ -180,7 +180,7 @@ export default function Admin() {
                       <td className="px-4 py-2.5 font-medium text-foreground">{w.companyName ?? `Workspace #${w.id}`}</td>
                       <td className="px-3 py-2.5 hidden sm:table-cell text-muted-foreground">{ownerEmail(w.userId)}</td>
                       <td className="px-3 py-2.5">
-                        <Select value={w.plan ?? "starter"} onValueChange={(v) => setPlan.mutate({ id: w.id, plan: v })}>
+                        <Select value={w.plan ?? "free"} onValueChange={(v) => setPlan.mutate({ id: w.id, plan: v })}>
                           <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             {PLAN_OPTIONS.map((p) => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}

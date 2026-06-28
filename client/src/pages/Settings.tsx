@@ -29,17 +29,30 @@ function readableBrandColor(c: string): string {
   return lum > 0.72 ? "#6366f1" : `#${h}`;
 }
 
-const PLAN_CONFIG = {  starter: {
+const PLAN_CONFIG = {
+  free: {
+    name: "Free",
+    price: "$0",
+    color: "text-slate-600 bg-slate-500/10 border-slate-200",
+    features: ["1 AI Agent", "50 conversations/mo", "30 contacts", "Knowledge base", "Lead capture"],
+  },
+  starter: {
     name: "Starter",
-    price: "$29/mo",
+    price: "$9.99/mo",
     color: "text-blue-600 bg-blue-500/10 border-blue-200",
-    features: ["1 AI Agent", "500 conversations/mo", "Basic analytics", "Email support"],
+    features: ["2 AI Agents", "1,000 conversations/mo", "1,000 contacts", "Tickets & email-to-ticket", "Remove branding"],
   },
   growth: {
     name: "Growth",
-    price: "$79/mo",
+    price: "$49/mo",
     color: "text-purple-600 bg-purple-500/10 border-purple-200",
-    features: ["5 AI Agents", "5,000 conversations/mo", "Advanced analytics", "Human handoff", "Priority support"],
+    features: ["5 AI Agents", "5,000 conversations/mo", "5,000 contacts", "Human handoff & inbox", "Advanced analytics", "10 seats"],
+  },
+  business: {
+    name: "Business",
+    price: "$129/mo",
+    color: "text-emerald-600 bg-emerald-500/10 border-emerald-200",
+    features: ["15 AI Agents", "20,000 conversations/mo", "25,000 contacts", "Multi-language", "Email branding", "25 seats"],
   },
   enterprise: {
     name: "Enterprise",
@@ -147,8 +160,8 @@ export default function Settings() {
     });
   };
 
-  const currentPlan = workspace?.plan ?? "starter";
-  const planInfo = PLAN_CONFIG[currentPlan as keyof typeof PLAN_CONFIG] ?? PLAN_CONFIG.starter;
+  const currentPlan = workspace?.plan ?? "free";
+  const planInfo = PLAN_CONFIG[currentPlan as keyof typeof PLAN_CONFIG] ?? PLAN_CONFIG.free;
 
   return (
     <div className="flex h-full overflow-hidden">

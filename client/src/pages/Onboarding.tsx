@@ -46,13 +46,13 @@ const FEATURES = [
   { id: "ai_agent", label: "AI Agent", icon: Bot, desc: "Automate customer conversations with AI" },
   { id: "human_support", label: "Human Support", icon: Users, desc: "Live agent inbox and escalation" },
   { id: "ticketing", label: "Ticketing", icon: MessageSquare, desc: "Track and resolve customer issues" },
-  { id: "campaigns", label: "Campaigns", icon: Zap, desc: "Proactive messaging and broadcasts" },
 ];
 
 const PLANS = [
-  { id: "starter", label: "Starter", price: "Free", features: ["1 AI Agent", "500 conversations/mo", "Basic analytics"], highlight: false },
+  { id: "free", label: "Free", price: "$0", features: ["1 AI Agent", "50 conversations/mo", "30 contacts"], highlight: false },
+  { id: "starter", label: "Starter", price: "$9.99/mo", features: ["2 AI Agents", "1,000 conversations/mo", "Tickets", "Remove branding"], highlight: false },
   { id: "growth", label: "Growth", price: "$49/mo", features: ["5 AI Agents", "5,000 conversations/mo", "Advanced analytics", "Human handoff"], highlight: true },
-  { id: "enterprise", label: "Enterprise", price: "Custom", features: ["Unlimited agents", "Unlimited conversations", "Custom integrations", "SLA support"], highlight: false },
+  { id: "business", label: "Business", price: "$129/mo", features: ["15 AI Agents", "20,000 conversations/mo", "Multi-language", "25 seats"], highlight: false },
 ];
 
 const steps = [
@@ -71,7 +71,7 @@ export default function Onboarding() {
   const [companyName, setCompanyName] = useState("");
   const [companyWebsite, setCompanyWebsite] = useState("");
   const [selectedFeatures, setSelectedFeatures] = useState<string[]>([]);
-  const [plan, setPlan] = useState("starter");
+  const [plan, setPlan] = useState("free");
 
   const updateWorkspace = trpc.workspace.update.useMutation();
   const createAgent = trpc.agent.create.useMutation();
@@ -327,7 +327,7 @@ export default function Onboarding() {
                     <h1 className="text-2xl font-bold text-foreground mb-2">Choose your plan</h1>
                     <p className="text-muted-foreground">Start free and upgrade as you grow. No credit card required.</p>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {PLANS.map((p) => (
                       <button
                         key={p.id}

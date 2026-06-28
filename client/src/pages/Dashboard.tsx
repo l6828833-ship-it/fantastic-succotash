@@ -8,7 +8,6 @@ import {
   TrendingUp,
   Users,
   Ticket,
-  Megaphone,
   CheckCircle2,
   AlertCircle,
   Clock,
@@ -154,7 +153,6 @@ export default function Dashboard() {
                 { href: "/agents", icon: Bot, label: "Configure Agent", desc: "Customize AI behavior" },
                 { href: "/inbox", icon: MessageSquare, label: "Open Inbox", desc: `${conversations?.length ?? 0} open conversations`, badge: conversations?.length },
                 { href: "/tickets", icon: Ticket, label: "View Tickets", desc: `${tickets?.length ?? 0} open tickets`, badge: tickets?.length },
-                { href: "/campaigns", icon: Megaphone, label: "New Campaign", desc: "Send broadcast message" },
               ].map((item) => (
                 <Link key={item.href} href={item.href}>
                   <div className="flex items-center gap-3 p-3 rounded-lg hover:bg-accent/50 cursor-pointer transition-colors group">

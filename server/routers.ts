@@ -143,6 +143,17 @@ const agentRouter = router({
     .mutation(async ({ ctx, input }) => {
       const workspace = await db.getWorkspaceByUserId(ctx.user.id);
       if (!workspace) throw new TRPCError({ code: "BAD_REQUEST", message: "No workspace found" });
+      // Enforce the plan's agent limit.
+      const agentLimit = db.agentLimitForPlan(workspace.plan);
+      if (Number.isFinite(agentLimit)) {
+        const count = await db.countAgentsByWorkspace(workspace.id);
+        if (count >= agentLimit) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: `Your plan allows up to ${agentLimit} agent${agentLimit === 1 ? "" : "s"}. Upgrade to add more.`,
+          });
+        }
+      }
       return db.createAgent({ ...input, workspaceId: workspace.id });
     }),
   update: protectedProcedure
@@ -665,10 +676,10 @@ const contactsRouter = router({
   }),
   stats: protectedProcedure.query(async ({ ctx }) => {
     const workspace = await db.getWorkspaceByUserId(ctx.user.id);
-    if (!workspace) return { total: 0, subscribed: 0, active30d: 0, openTickets: 0, plan: "starter", limit: 100 };
+    if (!workspace) return { total: 0, subscribed: 0, active30d: 0, openTickets: 0, plan: "free", limit: 30 };
     const stats = await db.getContactStats(workspace.id);
     const limit = db.contactLimitForPlan(workspace.plan);
-    return { ...stats, plan: workspace.plan ?? "starter", limit: Number.isFinite(limit) ? limit : null };
+    return { ...stats, plan: workspace.plan ?? "free", limit: Number.isFinite(limit) ? limit : null };
   }),
   get: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ input }) => {
     return db.getContactById(input.id);
@@ -732,11 +743,11 @@ const teamRouter = router({
   // and disable the invite form when the plan limit is reached.
   seats: protectedProcedure.query(async ({ ctx }) => {
     const workspace = await db.getWorkspaceByUserId(ctx.user.id);
-    if (!workspace) return { used: 1, limit: db.teamSeatLimitForPlan("starter"), plan: "starter" };
+    if (!workspace) return { used: 1, limit: db.teamSeatLimitForPlan("free"), plan: "free" };
     const members = await db.countTeamMembersByWorkspace(workspace.id);
     const limit = db.teamSeatLimitForPlan(workspace.plan);
     // +1 for the owner, who always occupies a seat but isn't a team_members row.
-    return { used: members + 1, limit: Number.isFinite(limit) ? limit : null, plan: workspace.plan ?? "starter" };
+    return { used: members + 1, limit: Number.isFinite(limit) ? limit : null, plan: workspace.plan ?? "free" };
   }),
   create: protectedProcedure
     .input(z.object({

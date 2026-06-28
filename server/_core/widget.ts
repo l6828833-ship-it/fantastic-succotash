@@ -107,7 +107,7 @@ const WIDGET_JS = `(function(){
     if (/^(https?:)?\\/\\//.test(id) || id.charAt(0) === "/") {
       return '<img src="' + id + '" alt="">';
     }
-    var paid = plan && plan !== "starter" && plan !== "free";
+    var paid = plan && plan !== "free";
     if (!ICONS[id]) id = FREE_ICON;
     if (PREMIUM_ICONS[id] && !paid) id = FREE_ICON; // enforce gating on the widget too
     return ICONS[id];
@@ -631,7 +631,7 @@ export function registerWidgetRoutes(app: Express) {  // The widget loader scrip
         leadFields: (agent.leadCaptureFields && agent.leadCaptureFields.length > 0) ? agent.leadCaptureFields : ["name", "email"],
         ticketMode: agent.ticketMode ?? "off",
         ticketDelaySeconds: agent.ticketDelaySeconds ?? 0,
-        plan: workspace?.plan ?? "starter",
+        plan: workspace?.plan ?? "free",
         isActive: agent.isActive ?? true,
       });
     } catch (error) {
@@ -822,6 +822,26 @@ export function registerWidgetRoutes(app: Express) {  // The widget loader scrip
       let conv = conversationId ? await db.getConversationById(conversationId) : undefined;
       if (!conv || conv.workspaceId !== agent.workspaceId) conv = undefined;
       if (!conv) {
+        // Enforce the workspace's monthly conversation cap before starting a new
+        // chat thread. Defensive: a counting failure must never block live chat.
+        try {
+          const wsForLimit = await db.getWorkspaceById(agent.workspaceId);
+          const convLimit = db.conversationLimitForPlan(wsForLimit?.plan);
+          if (Number.isFinite(convLimit)) {
+            const used = await db.countConversationsThisMonth(agent.workspaceId);
+            if (used >= convLimit) {
+              res.json({
+                reply: agent.fallbackMessage || "We're receiving a lot of messages right now. Please reach out again a little later.",
+                conversationId: null,
+                mode: "ai",
+                limitReached: true,
+              });
+              return;
+            }
+          }
+        } catch (limitErr) {
+          console.error("[Widget] conversation limit check failed", limitErr);
+        }
         conv = await db.createConversation({
           workspaceId: agent.workspaceId,
           agentId: agent.id,

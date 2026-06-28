@@ -116,6 +116,8 @@ vi.mock("./db", () => ({
   getAgentsByWorkspace: vi.fn().mockResolvedValue([]),
   updateAgent: vi.fn().mockResolvedValue(undefined),
   deleteAgent: vi.fn().mockResolvedValue(undefined),
+  agentLimitForPlan: vi.fn().mockReturnValue(Number.POSITIVE_INFINITY),
+  countAgentsByWorkspace: vi.fn().mockResolvedValue(0),
   createArticle: vi.fn().mockResolvedValue({ id: 1, title: "Test", content: "Content", workspaceId: 1, agentId: null, category: "general", tags: null, imageUrl: null, status: "ready", sourceUrl: null, createdAt: new Date(), updatedAt: new Date() }),
   getArticlesByWorkspace: vi.fn().mockResolvedValue([]),
   updateArticle: vi.fn().mockResolvedValue(undefined),

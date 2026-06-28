@@ -76,7 +76,7 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
   const [, navigate] = useLocation();
   const { data: agent, isLoading } = trpc.agent.get.useQuery({ id: agentId });
   const { data: workspace } = trpc.workspace.get.useQuery();
-  const isPaidPlan = !!workspace?.plan && workspace.plan !== "starter" && workspace.plan !== "free";
+  const isPaidPlan = !!workspace?.plan && workspace.plan !== "free";
   const updateAgent = trpc.agent.update.useMutation({
     onSuccess: () => toast.success("Agent updated successfully"),
     onError: () => toast.error("Failed to update agent"),
