@@ -1,6 +1,7 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { customAlphabet } from "nanoid";
+import { randomBytes } from "node:crypto";
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -14,7 +15,7 @@ import {
   cancelStripeSubscription,
   PURCHASABLE_PLANS,
 } from "./_core/billing";
-import { requestBaseUrl, isEmailConfigured } from "./_core/email";
+import { requestBaseUrl, isEmailConfigured, sendEmail, brandedEmail, getWorkspaceEmailBranding } from "./_core/email";
 import { invokeLLM, type Message as LLMMessage } from "./_core/llm";
 import { ENV } from "./_core/env";
 import {
@@ -793,7 +794,6 @@ const teamRouter = router({
     .input(z.object({
       name: z.string().min(1),
       email: z.string().email(),
-      role: z.enum(["admin", "agent"]).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const workspace = await db.getWorkspaceByUserId(ctx.user.id);
@@ -824,7 +824,44 @@ const teamRouter = router({
         }
       }
 
-      return db.createTeamMember({ name: input.name.trim(), email, role: input.role ?? "agent", workspaceId: workspace.id, status: "invited" });
+      // Teammates are always invited as "agent" (no admin access via invite).
+      // Send an approval email with a one-time token; they join once they accept.
+      const token = randomBytes(24).toString("hex");
+      const member = await db.createTeamMember({
+        name: input.name.trim(),
+        email,
+        role: "agent",
+        workspaceId: workspace.id,
+        status: "invited",
+        inviteToken: token,
+      });
+
+      if (isEmailConfigured()) {
+        try {
+          const baseUrl = requestBaseUrl(ctx.req);
+          const acceptUrl = `${baseUrl}/accept-invite?token=${token}`;
+          const { brand } = await getWorkspaceEmailBranding(workspace.id);
+          const wsName = workspace.companyName || brand.name || "a Chatrico workspace";
+          await sendEmail({
+            to: email,
+            subject: `You're invited to join ${wsName} on Chatrico`,
+            html: brandedEmail({
+              title: "You're invited as a support agent",
+              bodyHtml:
+                `<p>Hi ${input.name.trim() || "there"},</p>` +
+                `<p>${ctx.user.email ?? "A workspace owner"} invited you to join <strong>${wsName}</strong> as a support agent on Chatrico.</p>` +
+                `<p style="margin:18px 0;"><a href="${acceptUrl}" style="background:#6366f1;color:#ffffff;padding:11px 18px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600;">Approve &amp; join as agent</a></p>` +
+                `<p style="color:#6b7280;font-size:13px;">If you didn't expect this invitation, you can safely ignore this email.</p>`,
+              brand,
+            }),
+            text: `You're invited to join ${wsName} as a support agent on Chatrico. Approve here: ${acceptUrl}`,
+          });
+        } catch (e) {
+          console.error("[Team] invite email failed", e);
+        }
+      }
+
+      return member;
     }),
   update: protectedProcedure
     .input(z.object({
@@ -1473,6 +1510,29 @@ const appConfigRouter = router({
   })),
 });
 
+// ─── Team invitations (public accept/approve flow) ────────────────────────────
+const inviteRouter = router({
+  // Look up a pending invite by token, to show the invitee what they're joining.
+  get: publicProcedure.input(z.object({ token: z.string().min(1) })).query(async ({ input }) => {
+    const m = await db.getTeamMemberByInviteToken(input.token);
+    if (!m) return null;
+    const ws = await db.getWorkspaceById(m.workspaceId);
+    return {
+      name: m.name,
+      email: m.email,
+      status: m.status,
+      workspaceName: ws?.companyName ?? "a Chatrico workspace",
+    };
+  }),
+  // Approve the invitation — marks the teammate active as an agent.
+  accept: publicProcedure.input(z.object({ token: z.string().min(1) })).mutation(async ({ input }) => {
+    const m = await db.getTeamMemberByInviteToken(input.token);
+    if (!m) throw new TRPCError({ code: "NOT_FOUND", message: "This invitation is invalid or has already been used." });
+    await db.acceptTeamMemberInvite(m.id);
+    return { success: true };
+  }),
+});
+
 // ─── Billing Router ───────────────────────────────────────────────────────────
 const billingRouter = router({
   // Which payment methods are available (so the UI only shows configured ones).
@@ -1614,6 +1674,7 @@ export const appRouter = router({
   affiliate: affiliateRouter,
   admin: adminRouter,
   appConfig: appConfigRouter,
+  invite: inviteRouter,
   billing: billingRouter,
 });
 

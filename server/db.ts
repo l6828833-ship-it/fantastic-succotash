@@ -1015,6 +1015,26 @@ export async function deleteTeamMember(id: number) {
   await db.delete(teamMembers).where(eq(teamMembers.id, id));
 }
 
+// Look up a pending invite by its one-time token.
+export async function getTeamMemberByInviteToken(token: string) {
+  const db = await getDb();
+  if (!db || !token) return undefined;
+  const result = await db.select().from(teamMembers).where(eq(teamMembers.inviteToken, token)).limit(1);
+  return result[0];
+}
+
+// Approve an invite: mark active, stamp acceptedAt, and clear the token.
+export async function acceptTeamMemberInvite(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const [row] = await db
+    .update(teamMembers)
+    .set({ status: "active", acceptedAt: new Date(), inviteToken: null })
+    .where(eq(teamMembers.id, id))
+    .returning();
+  return row;
+}
+
 
 // ─── Affiliates / Referrals ─────────────────────────────────────────────────--
 // Tiered commission rates based on the affiliate's number of referrals.

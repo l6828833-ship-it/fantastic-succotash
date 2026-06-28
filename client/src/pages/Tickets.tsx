@@ -248,7 +248,7 @@ export default function Tickets() {
   return (
     <div className="flex h-full overflow-hidden">
       {/* Left panel */}
-      <div className={cn("flex flex-col border-r border-border bg-background transition-all", selectedTicket ? "w-[420px] shrink-0" : "flex-1")}>
+      <div className={cn("flex-col border-r border-border bg-background transition-all w-full", selectedTicket ? "hidden md:flex md:w-[420px] md:shrink-0" : "flex md:flex-1")}>
         <div className="p-4 border-b border-border space-y-3">
           <div className="flex items-center justify-between">
             <div>
@@ -261,7 +261,7 @@ export default function Tickets() {
           </div>
 
           {/* Status tabs */}
-          <div className="flex gap-1">
+          <div className="flex flex-wrap gap-1">
             {(["all", "open", "in-progress", "closed"] as const).map((s) => (
               <button
                 key={s}
@@ -376,7 +376,10 @@ export default function Tickets() {
 
       {/* Right panel: detail */}
       {selectedTicket ? (
-        <div className="flex-1 flex flex-col overflow-hidden bg-background">
+        <div className="w-full md:flex-1 flex flex-col overflow-hidden bg-background">
+          <button type="button" className="md:hidden flex items-center gap-1 text-sm text-muted-foreground px-4 pt-3" onClick={() => setSelectedTicket(null)}>
+            <ArrowUpRight className="w-4 h-4 rotate-180" /> Back to tickets
+          </button>
           {/* Detail header */}
           <div className="p-4 border-b border-border flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -626,7 +629,7 @@ export default function Tickets() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex items-center justify-center bg-muted/10">
+        <div className="flex-1 hidden md:flex items-center justify-center bg-muted/10">
           <div className="text-center">
             <div className="w-16 h-16 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-4">
               <AlertCircle className="w-8 h-8 text-muted-foreground" />

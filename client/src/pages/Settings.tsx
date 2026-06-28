@@ -138,9 +138,8 @@ export default function Settings() {
   const { data: seats } = trpc.team.seats.useQuery();
   const [tmName, setTmName] = useState("");
   const [tmEmail, setTmEmail] = useState("");
-  const [tmRole, setTmRole] = useState<"admin" | "agent">("agent");
   const addMember = trpc.team.create.useMutation({
-    onSuccess: () => { utils.team.list.invalidate(); utils.team.seats.invalidate(); setTmName(""); setTmEmail(""); setTmRole("agent"); toast.success("Team member invited"); },
+    onSuccess: () => { utils.team.list.invalidate(); utils.team.seats.invalidate(); setTmName(""); setTmEmail(""); toast.success("Invitation email sent"); },
     onError: (e) => {
       if (e.data?.code === "FORBIDDEN") showUpgrade(e.message);
       else toast.error(e.message || "Failed to add team member");
@@ -155,7 +154,7 @@ export default function Settings() {
 
   const handleAddMember = () => {
     if (!tmName.trim() || !tmEmail.trim()) { toast.error("Name and email are required"); return; }
-    addMember.mutate({ name: tmName, email: tmEmail, role: tmRole });
+    addMember.mutate({ name: tmName, email: tmEmail });
   };
 
   const updateWorkspace = trpc.workspace.update.useMutation({
@@ -278,13 +277,13 @@ export default function Settings() {
   };
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex flex-col md:flex-row h-full overflow-hidden">
       {/* Settings sidebar */}
-      <div className="w-56 shrink-0 border-r border-border bg-background flex flex-col">
-        <div className="p-4 border-b border-border">
+      <div className="w-full md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-border bg-background flex flex-col">
+        <div className="hidden md:block p-4 border-b border-border">
           <h2 className="font-semibold text-foreground text-sm">Settings</h2>
         </div>
-        <nav className="flex-1 p-2 space-y-0.5">
+        <nav className="flex md:flex-col gap-1 md:gap-0.5 md:space-y-0.5 p-2 overflow-x-auto md:flex-1">
           {[
             { id: "workspace", label: "Workspace", icon: Building2 },
             { id: "team", label: "Team", icon: Users },
@@ -299,7 +298,7 @@ export default function Settings() {
               key={item.id}
               onClick={() => setActiveTab(item.id)}
               className={cn(
-                "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-left",
+                "shrink-0 md:w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-left whitespace-nowrap",
                 activeTab === item.id
                   ? "bg-primary/10 text-primary font-medium"
                   : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
@@ -409,7 +408,7 @@ export default function Settings() {
             <Card className="border-border">
               <CardHeader className="pb-4">
                 <CardTitle className="text-base flex items-center gap-2"><UserPlus className="w-4 h-4" />Invite a teammate</CardTitle>
-                <CardDescription>They'll appear in your team list and can be assigned to tickets.</CardDescription>
+                <CardDescription>We'll email them an invitation. Once they approve, they join as a support agent and can be assigned to conversations and tickets.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -423,13 +422,7 @@ export default function Settings() {
                   </div>
                   <div className="space-y-2 sm:col-span-1">
                     <Label>Role</Label>
-                    <Select value={tmRole} onValueChange={(v) => setTmRole(v as "admin" | "agent")}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="agent">Agent</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <div className="h-9 flex items-center px-3 rounded-md border border-input bg-muted/30 text-sm text-muted-foreground">Agent</div>
                   </div>
                 </div>
                 <div className="flex justify-end">
@@ -787,7 +780,7 @@ export default function Settings() {
                   </div>
                   <Badge className={planInfo.color}>Active</Badge>
                 </div>
-                <div className="mt-4 grid grid-cols-2 gap-2">
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {planInfo.features.map((f) => (
                     <div key={f} className="flex items-center gap-2 text-sm text-foreground">
                       <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />

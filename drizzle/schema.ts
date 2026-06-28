@@ -344,6 +344,10 @@ export const teamMembers = pgTable("team_members", {
   email: varchar("email", { length: 320 }).notNull(),
   role: text("role").$type<"owner" | "admin" | "agent">().default("agent"),
   status: text("status").$type<"active" | "invited">().default("invited"),
+  // Email-invite approval: a one-time token sent to the invitee; cleared once
+  // they approve. acceptedAt records when they accepted.
+  inviteToken: varchar("inviteToken", { length: 64 }),
+  acceptedAt: ts("acceptedAt"),
   createdAt: ts("createdAt").defaultNow().notNull(),
   updatedAt: ts("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });

@@ -138,7 +138,7 @@ export default function Inbox() {
   return (
     <div className="flex h-full overflow-hidden">
       {/* Conversation list */}
-      <div className="w-80 shrink-0 border-r border-border flex flex-col bg-background">
+      <div className={cn("border-r border-border flex-col bg-background w-full md:w-80 md:shrink-0", selectedConvId ? "hidden md:flex" : "flex")}>
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-3">
             <h2 className="font-semibold text-foreground">Inbox</h2>
@@ -213,7 +213,10 @@ export default function Inbox() {
 
       {/* Chat view */}
       {selectedConvId && selectedConv ? (
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="w-full md:flex-1 flex flex-col overflow-hidden">
+          <button type="button" className="md:hidden flex items-center gap-1 text-sm text-muted-foreground px-4 pt-3" onClick={() => setSelectedConvId(null)}>
+            <X className="w-4 h-4" /> Back to inbox
+          </button>
           {/* Header */}
           <div className="px-6 py-3 border-b border-border flex items-center justify-between bg-background shrink-0">
             <div className="flex items-center gap-3">
@@ -411,7 +414,7 @@ export default function Inbox() {
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+        <div className="flex-1 hidden md:flex flex-col items-center justify-center text-center p-8">
           <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
             <MessageSquare className="w-8 h-8 text-primary" />
           </div>

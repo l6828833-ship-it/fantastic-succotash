@@ -227,7 +227,7 @@ export default function Contacts() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* List */}
-        <div className={cn("flex flex-col bg-background transition-all", selected ? "flex-1 border-r border-border" : "flex-1")}>
+        <div className={cn("flex-col bg-background transition-all w-full", selected ? "hidden md:flex md:flex-1 md:border-r md:border-border" : "flex flex-1")}>
           {/* Filters */}
           <div className="p-4 border-b border-border flex flex-col sm:flex-row gap-2">
             <div className="relative flex-1">
@@ -336,7 +336,10 @@ export default function Contacts() {
 
         {/* Detail panel */}
         {selected && (
-          <div className="w-96 shrink-0 flex flex-col bg-background overflow-y-auto">
+          <div className="w-full md:w-96 md:shrink-0 flex flex-col bg-background overflow-y-auto">
+            <button type="button" className="md:hidden flex items-center gap-1 text-sm text-muted-foreground px-4 pt-3" onClick={() => setSelectedId(null)}>
+              <X className="w-4 h-4" /> Back to contacts
+            </button>
             <div className="p-4 border-b border-border flex items-start justify-between">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-base font-semibold text-primary shrink-0">
