@@ -27,7 +27,7 @@ export default function EmbedCode() {
   const origin = typeof window !== "undefined" ? window.location.origin : "https://your-chatbotpro-domain.com";
 
   const scriptTag = selectedAgent
-    ? `<!-- ChatBot Pro Widget -->
+    ? `<!-- Chatrico Widget -->
 <!-- Appearance (color, position, size, theme) is managed in Agent Settings
      and applied automatically — no need to edit or re-copy this snippet. -->
 <script>
