@@ -101,7 +101,6 @@ const workspaceRouter = router({
       industry: z.string().optional(),
       companySize: z.string().optional(),
       features: z.array(z.string()).optional(),
-      plan: z.string().optional(),
       supportOnline: z.boolean().optional(),
       onboardingCompleted: z.boolean().optional(),
       onboardingStep: z.number().optional(),
@@ -118,11 +117,13 @@ const workspaceRouter = router({
         await db.createWorkspace({ userId: ctx.user.id });
         workspace = await db.getWorkspaceByUserId(ctx.user.id);
       }
+      // NOTE: the plan is intentionally NOT settable here. Plans only change via
+      // a confirmed payment (Stripe/Cryptomus webhook) or an admin action — this
+      // prevents granting a paid plan for free from onboarding or the client.
       // Email branding is a paid (Pro+) feature — never persist those fields on
       // a plan that doesn't include it (defense in depth alongside the apply
       // gate in getWorkspaceEmailBranding).
-      const planForFeatures = input.plan ?? workspace!.plan;
-      if (!db.planHasFeature(planForFeatures, "emailBranding")) {
+      if (!db.planHasFeature(workspace!.plan, "emailBranding")) {
         delete input.emailBrandName;
         delete input.emailLogoUrl;
         delete input.emailBrandColor;
@@ -130,11 +131,6 @@ const workspaceRouter = router({
         delete input.emailSignature;
       }
       await db.updateWorkspace(workspace!.id, input);
-      // If this update upgraded the plan to a paid tier, credit the referring
-      // affiliate for the sale (no-op for free plans or non-referred workspaces).
-      if (input.plan) {
-        await creditReferralForUpgrade({ workspaceId: workspace!.id, plan: input.plan });
-      }
       return db.getWorkspaceByUserId(ctx.user.id);
     }),
 });

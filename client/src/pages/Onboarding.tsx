@@ -93,22 +93,19 @@ export default function Onboarding() {
     try {
       const updated = await updateWorkspace.mutateAsync({
         industry,
-        companySize,
         companyName,
+        companySize,
         companyWebsite: companyWebsite || undefined,
         features: selectedFeatures,
-        plan,
         onboardingCompleted: true,
         onboardingStep: 5,
       });
 
       // Push the updated workspace straight into the query cache so the app
-      // transitions to the dashboard instantly (no refetch wait).
+      // transitions instantly (no refetch wait).
       if (updated) utils.workspace.get.setData(undefined, updated);
-      toast.success("Welcome aboard! Your workspace is ready.");
-      navigate("/dashboard");
 
-      // Create a default agent in the background — don't block the redirect.
+      // Create a default agent in the background.
       const industryLabel = INDUSTRIES.find((i) => i.id === industry)?.label ?? "General";
       createAgent.mutate({
         name: `${companyName || "My"} Assistant`,
@@ -120,6 +117,17 @@ export default function Onboarding() {
         systemPrompt: `You are a helpful AI assistant for ${companyName || "our company"}, a company in the ${industryLabel} industry. Be professional, helpful, and concise in your responses.`,
         fallbackMessage: "I'm sorry, I don't have information about that. Let me connect you with a human agent.",
       });
+
+      // The workspace always starts on Free. If a paid plan was selected, send
+      // the user to checkout to pay — the plan only activates after payment.
+      const paid = ["starter", "pro", "business"].includes(plan);
+      if (paid) {
+        toast.success("Workspace ready! Complete payment to activate your plan.");
+        navigate(`/settings?upgrade=${plan}`);
+      } else {
+        toast.success("Welcome aboard! Your workspace is ready.");
+        navigate("/dashboard");
+      }
     } catch (err) {
       toast.error("Something went wrong. Please try again.");
     }
@@ -132,7 +140,6 @@ export default function Onboarding() {
         industry: industry || undefined,
         companySize: companySize || undefined,
         features: selectedFeatures.length > 0 ? selectedFeatures : ["ai_agent"],
-        plan,
         onboardingCompleted: true,
         onboardingStep: 5,
       });
@@ -149,7 +156,7 @@ export default function Onboarding() {
       <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-background/80 backdrop-blur-sm">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <MessageSquare className="w-4 h-4 text-white" />
+            <Bot className="w-4 h-4 text-white" />
           </div>
           <span className="font-bold text-foreground">Chatrico</span>
         </div>
