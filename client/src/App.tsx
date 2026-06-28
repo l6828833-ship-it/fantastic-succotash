@@ -23,6 +23,7 @@ import Login from "./pages/Login";
 import TicketPortal from "./pages/TicketPortal";
 import Settings from "./pages/Settings";
 import AppLayout from "./components/AppLayout";
+import { UpgradeProvider } from "./components/UpgradeDialog";
 import { useAuth } from "./_core/hooks/useAuth";
 import { trpc } from "./lib/trpc";
 import { getLoginUrl } from "./const";
@@ -231,7 +232,9 @@ function App() {
       <ThemeProvider defaultTheme="light" switchable>
         <TooltipProvider>
           <Toaster richColors position="top-right" />
-          <Router />
+          <UpgradeProvider>
+            <Router />
+          </UpgradeProvider>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

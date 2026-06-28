@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { useState } from "react";
+import { useUpgrade } from "@/components/UpgradeDialog";
 
 const HANDOFF_LABELS: Record<string, { label: string; icon: React.ElementType; color: string }> = {
   ai_only: { label: "AI Only", icon: Bot, color: "bg-blue-500/10 text-blue-600" },
@@ -19,8 +20,16 @@ const HANDOFF_LABELS: Record<string, { label: string; icon: React.ElementType; c
 };
 
 export default function Agents() {
+  const { show: showUpgrade } = useUpgrade();
   const { data: agents, refetch } = trpc.agent.list.useQuery();
-  const createAgent = trpc.agent.create.useMutation({ onSuccess: () => { refetch(); setOpen(false); toast.success("Agent created!"); } });
+  const createAgent = trpc.agent.create.useMutation({
+    onSuccess: () => { refetch(); setOpen(false); toast.success("Agent created!"); },
+    onError: (e) => {
+      // Plan limit reached → show the upgrade popup instead of a plain error.
+      if (e.data?.code === "FORBIDDEN") { setOpen(false); showUpgrade(e.message); }
+      else toast.error(e.message || "Could not create agent");
+    },
+  });
   const deleteAgent = trpc.agent.delete.useMutation({ onSuccess: () => { refetch(); toast.success("Agent deleted"); } });
 
   const [open, setOpen] = useState(false);
