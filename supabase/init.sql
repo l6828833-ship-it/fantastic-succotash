@@ -388,3 +388,8 @@ CREATE TABLE IF NOT EXISTS "app_settings" (
 -- Admin: track user IP addresses to detect duplicate/abusive accounts.
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "lastIp" varchar(64);
 ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "signupIp" varchar(64);
+
+
+-- Team invitations: email-approval token + accepted timestamp.
+ALTER TABLE "team_members" ADD COLUMN IF NOT EXISTS "inviteToken" varchar(64);
+ALTER TABLE "team_members" ADD COLUMN IF NOT EXISTS "acceptedAt" timestamptz;
