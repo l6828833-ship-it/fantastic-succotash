@@ -797,11 +797,15 @@ export function registerWidgetRoutes(app: Express) {  // The widget loader scrip
       const userMsg = await db.createMessage({ conversationId, role: "user", content: message });
       const userMessageId = userMsg?.id ?? null;
 
-      // Is a human available to take over? Driven by the workspace's manual
-      // online/offline toggle. When offline, the widget offers a ticket instead
-      // of promising a live reply that won't come.
+      // Is a human available to take over? Per-agent availability wins; "auto"
+      // follows the workspace Inbox online/offline toggle. When unavailable, the
+      // widget offers a ticket instead of promising a live reply that won't come.
       const ws = await db.getWorkspaceById(agent.workspaceId);
-      const humanAvailable = ws?.supportOnline !== false;
+      const agentAvailability = agent.humanAvailability ?? "auto";
+      const humanAvailable =
+        agentAvailability === "online" ? true :
+        agentAvailability === "offline" ? false :
+        ws?.supportOnline !== false;
 
       // AI-first then escalation: evaluate the configured triggers on this
       // message. If one fires, mark the conversation escalated so it routes to a

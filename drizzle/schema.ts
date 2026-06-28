@@ -92,6 +92,11 @@ export const agents = pgTable("agents", {
   fallbackMessage: text("fallbackMessage"),
   welcomeMessage: text("welcomeMessage"),
   handoffMode: text("handoffMode").$type<"ai_only" | "ai_first_human_escalation" | "human_only">().default("ai_only"),
+  // Per-agent human availability for live handoffs:
+  //   "auto"    – follow the workspace Inbox online/offline toggle (default)
+  //   "online"  – always route conversations needing a human to the Inbox
+  //   "offline" – never route to a human; offer a support ticket instead
+  humanAvailability: text("humanAvailability").$type<"auto" | "online" | "offline">().default("auto"),
   escalationTriggers: jsonb("escalationTriggers").$type<string[]>(),
   escalationMessage: text("escalationMessage"),
   workingHoursEnabled: boolean("workingHoursEnabled").default(false),
