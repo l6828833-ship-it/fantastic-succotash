@@ -77,9 +77,10 @@ const TESTIMONIALS = [
 ];
 
 const PLANS = [
-  { id: "starter", name: "Starter", price: "Free", period: "", highlight: false, blurb: "For getting started", features: ["1 AI agent", "500 conversations / mo", "Basic analytics", "Embed on any site"] },
-  { id: "growth", name: "Growth", price: "$49", period: "/mo", highlight: true, blurb: "For growing teams", features: ["5 AI agents", "5,000 conversations / mo", "Advanced analytics", "Human handoff & tickets", "Lead capture", "Remove branding"] },
-  { id: "enterprise", name: "Enterprise", price: "Custom", period: "", highlight: false, blurb: "For scale", features: ["Unlimited agents", "Unlimited conversations", "Custom integrations", "SLA & priority support", "Dedicated onboarding"] },
+  { id: "free", name: "Free", price: "$0", period: "", highlight: false, blurb: "To get started", features: ["1 AI agent", "50 conversations / mo", "30 contacts stored", "Knowledge base", "Embed on any site", "Lead capture"] },
+  { id: "starter", name: "Starter", price: "$9.99", period: "/mo", highlight: false, blurb: "For small sites", features: ["2 AI agents", "1,000 conversations / mo", "1,000 contacts", "Learn from your website", "Tickets & email-to-ticket", "Premium icons + remove branding"] },
+  { id: "growth", name: "Growth", price: "$49", period: "/mo", highlight: true, blurb: "For growing teams", features: ["5 AI agents", "5,000 conversations / mo", "5,000 contacts", "Human handoff & live inbox", "Escalation rules", "Advanced analytics", "10 team seats"] },
+  { id: "business", name: "Business", price: "$129", period: "/mo", highlight: false, blurb: "For scale", features: ["15 AI agents", "20,000 conversations / mo", "25,000 contacts", "Multi-language replies", "Email branding", "25 team seats", "Priority support"] },
 ];
 
 const FAQS = [
@@ -87,7 +88,7 @@ const FAQS = [
   { q: "What happens when the AI can't answer?", a: "It can hand the conversation to a human on your team, show a fallback message, or open a support ticket — you decide per agent." },
   { q: "Will my widget settings update without re-copying the code?", a: "Yes. The snippet only carries your agent ID. Color, position, theme, size, welcome message and knowledge are all read live from your dashboard." },
   { q: "Can each agent have its own knowledge?", a: "Absolutely. Every agent has its own Q&A and articles, and can also learn directly from a website URL — perfect if you manage multiple brands." },
-  { q: "Is there a free plan?", a: "Yes — the Starter plan is free and includes one agent and 500 conversations per month. Upgrade whenever you're ready." },
+  { q: "Is there a free plan?", a: "Yes — the Free plan includes one agent, 50 conversations per month and 30 stored contacts. Upgrade to Starter ($9.99/mo) or higher whenever you're ready." },
   { q: "Do you have an affiliate program?", a: "We do — earn up to 30% recurring commission for every customer you refer, with withdrawals via PayPal, bank transfer, Wise or crypto." },
 ];
 
@@ -382,7 +383,7 @@ export default function Home() {
             <h2 className="text-3xl sm:text-4xl font-bold tracking-tight">Simple, scalable pricing</h2>
             <p className="mt-3 text-muted-foreground">Start free. Upgrade when you grow. Cancel anytime.</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-6 items-start">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 items-start">
             {PLANS.map((p) => (
               <div
                 key={p.id}
@@ -407,7 +408,7 @@ export default function Home() {
                 </ul>
                 <Link href="/login">
                   <Button className="w-full mt-6" variant={p.highlight ? "default" : "outline"}>
-                    {p.id === "enterprise" ? "Contact sales" : "Get started"}
+                    {p.id === "free" ? "Get started free" : "Get started"}
                   </Button>
                 </Link>
               </div>

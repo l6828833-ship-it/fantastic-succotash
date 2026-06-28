@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS "workspaces" (
   "industry" varchar(128),
   "companySize" varchar(64),
   "features" jsonb,
-  "plan" varchar(64) DEFAULT 'starter',
+  "plan" varchar(64) DEFAULT 'free',
   "onboardingCompleted" boolean DEFAULT false,
   "onboardingStep" integer DEFAULT 1,
   "createdAt" timestamptz NOT NULL DEFAULT now(),
@@ -290,6 +290,16 @@ ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "emailLogoUrl" text;
 ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "emailBrandColor" varchar(32);
 ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "supportEmail" varchar(320);
 ALTER TABLE "workspaces" ADD COLUMN IF NOT EXISTS "emailSignature" text;
+-- Pricing plan default moved from 'starter' to 'free' (the explicit free tier).
+ALTER TABLE "workspaces" ALTER COLUMN "plan" SET DEFAULT 'free';
+-- Plan restructure: the old free tier was "starter"; "free" is now the explicit
+-- free default and "starter" is a paid $9.99 tier. Migrate existing free-tier
+-- workspaces (and NULLs) to "free" exactly ONCE, guarded by a marker so a later
+-- paid "starter" subscriber is never downgraded on a subsequent boot. The
+-- migration runner splits on ";", so each line below is a standalone statement.
+CREATE TABLE IF NOT EXISTS "_chatrico_migrations" ("key" text PRIMARY KEY, "applied_at" timestamptz DEFAULT now());
+UPDATE "workspaces" SET "plan" = 'free' WHERE ("plan" IS NULL OR "plan" = 'starter') AND NOT EXISTS (SELECT 1 FROM "_chatrico_migrations" WHERE "key" = 'plan_free_rename_v1');
+INSERT INTO "_chatrico_migrations" ("key") VALUES ('plan_free_rename_v1') ON CONFLICT DO NOTHING;
 
 -- One-time codes for email verification (sign-up OTP) and password reset.
 CREATE TABLE IF NOT EXISTS "auth_otps" (
@@ -317,7 +327,7 @@ CREATE TABLE IF NOT EXISTS "referrals" (
   "affiliateId" integer NOT NULL,
   "referredName" varchar(255),
   "referredEmail" varchar(320),
-  "plan" varchar(64) DEFAULT 'starter',
+  "plan" varchar(64) DEFAULT 'free',
   "amount" integer DEFAULT 0,
   "status" text DEFAULT 'pending',
   "createdAt" timestamptz NOT NULL DEFAULT now()

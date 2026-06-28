@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, isNull, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { readFileSync } from "fs";
@@ -718,18 +718,73 @@ export async function getContactsByWorkspace(workspaceId: number) {
   return db.select().from(contacts).where(eq(contacts.workspaceId, workspaceId)).orderBy(desc(contacts.updatedAt));
 }
 
-// Per-plan contact storage limits. The free "starter" plan stores up to 100
-// contacts; higher plans store more. Use Infinity for "unlimited".
+// Per-plan contact storage limits. Use Infinity for "unlimited". Keep plan ids
+// in sync with CONVERSATION_LIMITS / TEAM_SEAT_LIMITS / AGENT_LIMITS /
+// PLAN_PRICE_CENTS and the public plan lists.
 export const CONTACT_LIMITS: Record<string, number> = {
-  starter: 100,
-  free: 100,
+  free: 30,
+  starter: 1000,
   growth: 5000,
+  business: 25000,
   enterprise: Number.POSITIVE_INFINITY,
 };
 
 export function contactLimitForPlan(plan?: string | null): number {
-  if (!plan) return CONTACT_LIMITS.starter;
-  return CONTACT_LIMITS[plan] ?? CONTACT_LIMITS.starter;
+  if (!plan) return CONTACT_LIMITS.free;
+  return CONTACT_LIMITS[plan] ?? CONTACT_LIMITS.free;
+}
+
+// Per-plan monthly conversation (chat thread) limits. A conversation is one
+// visitor chat thread; it can contain many messages. Counted per calendar month.
+export const CONVERSATION_LIMITS: Record<string, number> = {
+  free: 50,
+  starter: 1000,
+  growth: 5000,
+  business: 20000,
+  enterprise: Number.POSITIVE_INFINITY,
+};
+
+export function conversationLimitForPlan(plan?: string | null): number {
+  if (!plan) return CONVERSATION_LIMITS.free;
+  return CONVERSATION_LIMITS[plan] ?? CONVERSATION_LIMITS.free;
+}
+
+// Per-plan limit on how many AI agents a workspace can create.
+export const AGENT_LIMITS: Record<string, number> = {
+  free: 1,
+  starter: 2,
+  growth: 5,
+  business: 15,
+  enterprise: Number.POSITIVE_INFINITY,
+};
+
+export function agentLimitForPlan(plan?: string | null): number {
+  if (!plan) return AGENT_LIMITS.free;
+  return AGENT_LIMITS[plan] ?? AGENT_LIMITS.free;
+}
+
+// Count conversations created in the current calendar month for a workspace.
+export async function countConversationsThisMonth(workspaceId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const now = new Date();
+  const startOfMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(conversations)
+    .where(and(eq(conversations.workspaceId, workspaceId), gte(conversations.createdAt, startOfMonth)));
+  return Number(result[0]?.count ?? 0);
+}
+
+// Count AI agents owned by a workspace (for plan agent-limit enforcement).
+export async function countAgentsByWorkspace(workspaceId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(agents)
+    .where(eq(agents.workspaceId, workspaceId));
+  return Number(result[0]?.count ?? 0);
 }
 
 export async function countContactsByWorkspace(workspaceId: number) {
@@ -815,15 +870,16 @@ export async function getContactStats(workspaceId: number) {
 // of additional team_members allowed is (limit - 1). Keep plan ids in sync with
 // CONTACT_LIMITS / the Onboarding plan list.
 export const TEAM_SEAT_LIMITS: Record<string, number> = {
+  free: 1,
   starter: 2,
-  free: 2,
   growth: 10,
+  business: 25,
   enterprise: Number.POSITIVE_INFINITY,
 };
 
 export function teamSeatLimitForPlan(plan?: string | null): number {
-  if (!plan) return TEAM_SEAT_LIMITS.starter;
-  return TEAM_SEAT_LIMITS[plan] ?? TEAM_SEAT_LIMITS.starter;
+  if (!plan) return TEAM_SEAT_LIMITS.free;
+  return TEAM_SEAT_LIMITS[plan] ?? TEAM_SEAT_LIMITS.free;
 }
 
 export async function getTeamMembersByWorkspace(workspaceId: number) {
@@ -892,9 +948,10 @@ export function commissionRateForReferrals(count: number): number {
 // manually by an admin. Keep the plan ids in sync with CONTACT_LIMITS / the
 // Onboarding plan list.
 export const PLAN_PRICE_CENTS: Record<string, number> = {
-  starter: 0,
   free: 0,
+  starter: 999,
   growth: 4900,
+  business: 12900,
   enterprise: 0,
 };
 

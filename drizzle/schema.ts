@@ -57,7 +57,7 @@ export const workspaces = pgTable("workspaces", {
   industry: varchar("industry", { length: 128 }),
   companySize: varchar("companySize", { length: 64 }),
   features: jsonb("features").$type<string[]>(),
-  plan: varchar("plan", { length: 64 }).default("starter"),
+  plan: varchar("plan", { length: 64 }).default("free"),
   // Manual online/offline toggle for the human support team. When offline, the
   // widget offers a ticket instead of promising a live human reply.
   supportOnline: boolean("supportOnline").default(true),
@@ -378,7 +378,7 @@ export const referrals = pgTable("referrals", {
   affiliateId: integer("affiliateId").notNull(),
   referredName: varchar("referredName", { length: 255 }),
   referredEmail: varchar("referredEmail", { length: 320 }),
-  plan: varchar("plan", { length: 64 }).default("starter"),
+  plan: varchar("plan", { length: 64 }).default("free"),
   // Attributed monthly revenue from this referral, stored in cents.
   amount: integer("amount").default(0),
   status: text("status").$type<"pending" | "active" | "cancelled">().default("pending"),

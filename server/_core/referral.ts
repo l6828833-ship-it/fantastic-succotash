@@ -46,7 +46,7 @@ export async function attributeReferral(opts: {
       affiliateId: affiliate.id,
       referredName: opts.name ?? null,
       referredEmail: opts.email ?? null,
-      plan: "starter",
+      plan: "free",
       amount: 0,
       status: "active",
     });
