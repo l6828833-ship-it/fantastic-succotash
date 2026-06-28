@@ -71,17 +71,20 @@ export default function Settings() {
 
   // Team members
   const { data: team = [] } = trpc.team.list.useQuery();
+  const { data: seats } = trpc.team.seats.useQuery();
   const [tmName, setTmName] = useState("");
   const [tmEmail, setTmEmail] = useState("");
   const [tmRole, setTmRole] = useState<"admin" | "agent">("agent");
   const addMember = trpc.team.create.useMutation({
-    onSuccess: () => { utils.team.list.invalidate(); setTmName(""); setTmEmail(""); setTmRole("agent"); toast.success("Team member added"); },
-    onError: () => toast.error("Failed to add team member"),
+    onSuccess: () => { utils.team.list.invalidate(); utils.team.seats.invalidate(); setTmName(""); setTmEmail(""); setTmRole("agent"); toast.success("Team member invited"); },
+    onError: (e) => toast.error(e.message || "Failed to add team member"),
   });
   const removeMember = trpc.team.delete.useMutation({
-    onSuccess: () => utils.team.list.invalidate(),
+    onSuccess: () => { utils.team.list.invalidate(); utils.team.seats.invalidate(); },
     onError: () => toast.error("Failed to remove team member"),
   });
+
+  const seatsFull = !!seats && seats.limit != null && seats.used >= seats.limit;
 
   const handleAddMember = () => {
     if (!tmName.trim() || !tmEmail.trim()) { toast.error("Name and email are required"); return; }
@@ -233,6 +236,13 @@ export default function Settings() {
             <div>
               <h3 className="text-lg font-semibold text-foreground">Team Members</h3>
               <p className="text-sm text-muted-foreground mt-1">Add the human agents on your team so they can handle conversations and tickets.</p>
+              {seats && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  <span className="font-medium text-foreground">{seats.used}</span>
+                  {seats.limit != null ? ` of ${seats.limit}` : ""} seats used
+                  {seatsFull && <span className="text-amber-600"> — limit reached, upgrade your plan to add more</span>}
+                </p>
+              )}
             </div>
 
             <Card className="border-border">
@@ -262,7 +272,7 @@ export default function Settings() {
                   </div>
                 </div>
                 <div className="flex justify-end">
-                  <Button onClick={handleAddMember} disabled={addMember.isPending} className="gap-2">
+                  <Button onClick={handleAddMember} disabled={addMember.isPending || seatsFull} className="gap-2">
                     <Plus className="w-4 h-4" />{addMember.isPending ? "Adding..." : "Add Member"}
                   </Button>
                 </div>

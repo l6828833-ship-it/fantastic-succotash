@@ -612,16 +612,52 @@ const teamRouter = router({
     if (!workspace) return [];
     return db.getTeamMembersByWorkspace(workspace.id);
   }),
+  // Seat usage for the current workspace so the UI can show "X of Y seats used"
+  // and disable the invite form when the plan limit is reached.
+  seats: protectedProcedure.query(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) return { used: 1, limit: db.teamSeatLimitForPlan("starter"), plan: "starter" };
+    const members = await db.countTeamMembersByWorkspace(workspace.id);
+    const limit = db.teamSeatLimitForPlan(workspace.plan);
+    // +1 for the owner, who always occupies a seat but isn't a team_members row.
+    return { used: members + 1, limit: Number.isFinite(limit) ? limit : null, plan: workspace.plan ?? "starter" };
+  }),
   create: protectedProcedure
     .input(z.object({
       name: z.string().min(1),
       email: z.string().email(),
-      role: z.enum(["owner", "admin", "agent"]).optional(),
+      role: z.enum(["admin", "agent"]).optional(),
     }))
     .mutation(async ({ ctx, input }) => {
       const workspace = await db.getWorkspaceByUserId(ctx.user.id);
       if (!workspace) throw new TRPCError({ code: "BAD_REQUEST", message: "No workspace found" });
-      return db.createTeamMember({ ...input, workspaceId: workspace.id, status: "invited" });
+
+      const email = input.email.trim().toLowerCase();
+
+      // Can't invite yourself — the owner already has full access.
+      if (ctx.user.email && email === ctx.user.email.trim().toLowerCase()) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "You're the workspace owner — no need to invite yourself." });
+      }
+
+      // No duplicate members within the same workspace.
+      const existing = await db.findTeamMemberByEmail(workspace.id, email);
+      if (existing) {
+        throw new TRPCError({ code: "CONFLICT", message: `${email} is already on your team.` });
+      }
+
+      // Enforce the plan's seat limit (owner counts as one seat).
+      const limit = db.teamSeatLimitForPlan(workspace.plan);
+      if (Number.isFinite(limit)) {
+        const used = (await db.countTeamMembersByWorkspace(workspace.id)) + 1;
+        if (used >= limit) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: `Your ${workspace.plan ?? "current"} plan allows ${limit} team seats. Upgrade your plan to invite more teammates.`,
+          });
+        }
+      }
+
+      return db.createTeamMember({ name: input.name.trim(), email, role: input.role ?? "agent", workspaceId: workspace.id, status: "invited" });
     }),
   update: protectedProcedure
     .input(z.object({
@@ -945,8 +981,11 @@ async function computeAffiliate(affiliate: { id: number; adjustmentCents?: numbe
   const payouts = await db.getPayoutsByAffiliate(affiliate.id);
   const reservedCents = payouts.filter((p) => p.status !== "rejected").reduce((s, p) => s + (p.amountCents ?? 0), 0);
   const paidCents = payouts.filter((p) => p.status === "paid").reduce((s, p) => s + (p.amountCents ?? 0), 0);
+  // In-flight = requested but not yet paid (pending + approved). Excludes paid so
+  // it isn't double-counted against the separate "paid out" figure.
+  const pendingCents = Math.max(0, reservedCents - paidCents);
   const availableCents = Math.max(0, earningsCents + adjustmentCents - reservedCents);
-  return { referralCount, activeReferrals, rate, revenueCents, earningsCents, adjustmentCents, reservedCents, paidCents, availableCents };
+  return { referralCount, activeReferrals, rate, revenueCents, earningsCents, adjustmentCents, reservedCents, pendingCents, paidCents, availableCents };
 }
 
 const affiliateRouter = router({
@@ -978,6 +1017,7 @@ const affiliateRouter = router({
       earningsCents: b.earningsCents,
       adjustmentCents: b.adjustmentCents,
       reservedCents: b.reservedCents,
+      pendingCents: b.pendingCents,
       paidCents: b.paidCents,
       availableCents: b.availableCents,
       minWithdrawalCents: MIN_WITHDRAWAL_CENTS,
@@ -1081,6 +1121,10 @@ const adminRouter = router({
   setAffiliateAdjustment: adminProcedure
     .input(z.object({ id: z.number(), amountCents: z.number().int() }))
     .mutation(async ({ input }) => db.updateAffiliateAdjustment(input.id, input.amountCents)),
+  // Users brought in by a specific affiliate (their referred sign-ups).
+  affiliateReferrals: adminProcedure
+    .input(z.object({ affiliateId: z.number() }))
+    .query(async ({ input }) => db.getReferralsByAffiliate(input.affiliateId)),
 });
 
 // ─── App Router ───────────────────────────────────────────────────────────────

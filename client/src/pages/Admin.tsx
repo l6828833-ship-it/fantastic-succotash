@@ -2,13 +2,14 @@ import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
-import { Shield, Users, Building2, Bot, MessageSquare, Ticket, Contact, ShieldCheck, ShieldOff, Gift, Wallet, Check, X, DollarSign } from "lucide-react";
+import { Shield, Users, Building2, Bot, MessageSquare, Ticket, Contact, ShieldCheck, ShieldOff, Gift, Wallet, Check, X, DollarSign, Eye } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 const PLAN_OPTIONS = ["starter", "growth", "enterprise"];
@@ -50,6 +51,11 @@ export default function Admin() {
   const { data: affiliates = [] } = trpc.admin.affiliates.useQuery(undefined, { enabled: isAdmin });
   const { data: payouts = [] } = trpc.admin.payouts.useQuery(undefined, { enabled: isAdmin });
   const [adjDrafts, setAdjDrafts] = useState<Record<number, string>>({});
+  const [viewAff, setViewAff] = useState<{ id: number; label: string } | null>(null);
+  const { data: affReferrals = [] } = trpc.admin.affiliateReferrals.useQuery(
+    { affiliateId: viewAff?.id ?? 0 },
+    { enabled: isAdmin && !!viewAff },
+  );
   const setAdjustment = trpc.admin.setAffiliateAdjustment.useMutation({
     onSuccess: () => { utils.admin.affiliates.invalidate(); toast.success("Adjustment saved"); },
     onError: () => toast.error("Failed to save adjustment"),
@@ -214,7 +220,17 @@ export default function Admin() {
                           <p className="font-medium text-foreground">{a.ownerName ?? a.ownerEmail ?? `Affiliate #${a.id}`}</p>
                           <p className="text-xs text-muted-foreground">{a.ownerEmail} · <span className="font-mono">{a.code}</span></p>
                         </td>
-                        <td className="px-3 py-2.5 text-foreground">{a.referralCount}</td>
+                        <td className="px-3 py-2.5">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 gap-1 text-xs px-2"
+                            disabled={a.referralCount === 0}
+                            onClick={() => setViewAff({ id: a.id, label: a.ownerEmail ?? a.code })}
+                          >
+                            <Eye className="w-3 h-3" />{a.referralCount}
+                          </Button>
+                        </td>
                         <td className="px-3 py-2.5 hidden sm:table-cell text-muted-foreground">{a.rate}%</td>
                         <td className="px-3 py-2.5 text-foreground">{money(a.earningsCents)}</td>
                         <td className="px-3 py-2.5 font-medium text-foreground">{money(a.availableCents)}</td>
@@ -317,6 +333,44 @@ export default function Admin() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={!!viewAff} onOpenChange={(o) => !o && setViewAff(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Referred users</DialogTitle>
+            <DialogDescription>People who signed up through {viewAff?.label}'s referral link.</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-80 overflow-y-auto">
+            {(affReferrals as { id: number; referredName?: string | null; referredEmail?: string | null; plan?: string | null; status?: string | null; createdAt: string | Date }[]).length === 0 ? (
+              <p className="text-sm text-muted-foreground py-6 text-center">No referred users found.</p>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-muted-foreground border-b border-border">
+                    <th className="py-2 font-medium">User</th>
+                    <th className="py-2 font-medium">Plan</th>
+                    <th className="py-2 font-medium">Status</th>
+                    <th className="py-2 font-medium text-right">Joined</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(affReferrals as { id: number; referredName?: string | null; referredEmail?: string | null; plan?: string | null; status?: string | null; createdAt: string | Date }[]).map((r) => (
+                    <tr key={r.id} className="border-b border-border last:border-0">
+                      <td className="py-2">
+                        <p className="font-medium text-foreground">{r.referredName ?? r.referredEmail ?? "User"}</p>
+                        {r.referredEmail && <p className="text-xs text-muted-foreground">{r.referredEmail}</p>}
+                      </td>
+                      <td className="py-2 capitalize text-muted-foreground">{r.plan ?? "—"}</td>
+                      <td className="py-2"><Badge variant="outline" className="text-xs capitalize">{r.status ?? "pending"}</Badge></td>
+                      <td className="py-2 text-right text-muted-foreground">{fmt(r.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
