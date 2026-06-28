@@ -51,13 +51,13 @@ export default function Login() {
       if (mode === "login") {
         const { ok, data } = await post("/api/auth/login", { email: email.trim(), password });
         if (!ok) { toast.error(data.error || "Something went wrong"); return; }
-        window.location.href = "/";
+        window.location.href = "/dashboard";
         return;
       }
       // signup
       const { ok, data } = await post("/api/auth/signup/request", { email: email.trim(), password, name: name.trim() });
       if (!ok) { toast.error(data.error || "Something went wrong"); return; }
-      if (data.verified) { window.location.href = "/"; return; } // no email provider → created directly
+      if (data.verified) { window.location.href = "/dashboard"; return; } // no email provider → created directly
       // OTP sent → move to verify step
       setStep("verify");
       toast.success("We emailed you a 6-digit verification code.");
@@ -78,7 +78,7 @@ export default function Login() {
     try {
       const { ok, data } = await post("/api/auth/signup/verify", { email: email.trim(), code: code.trim() });
       if (!ok) { toast.error(data.error || "Invalid code"); return; }
-      window.location.href = "/";
+      window.location.href = "/dashboard";
     } catch {
       toast.error("Could not reach the server. Please try again.");
     } finally {

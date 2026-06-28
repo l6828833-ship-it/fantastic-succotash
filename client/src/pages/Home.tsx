@@ -111,7 +111,7 @@ export default function Home() {
   const { user } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
-  const primaryCta = user ? { href: "/", label: "Go to dashboard" } : { href: "/login", label: "Get started free" };
+  const primaryCta = user ? { href: "/dashboard", label: "Go to dashboard" } : { href: "/login", label: "Get started free" };
 
   return (
     <div className="min-h-screen bg-background text-foreground">
