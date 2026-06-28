@@ -3,7 +3,7 @@ import { useAuth } from "@/_core/hooks/useAuth";
 import { useState, useEffect } from "react";
 import {
   Building2, Bell, Puzzle, CreditCard, User, Save, Check, Globe, Users, Mail,
-  Zap, Shield, ChevronRight, AlertCircle, CheckCircle2, ExternalLink, Plus, Trash2, UserPlus,
+  Zap, Shield, ChevronRight, AlertCircle, CheckCircle2, ExternalLink, Plus, Trash2, UserPlus, Bitcoin, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -162,6 +163,35 @@ export default function Settings() {
 
   const currentPlan = workspace?.plan ?? "free";
   const planInfo = PLAN_CONFIG[currentPlan as keyof typeof PLAN_CONFIG] ?? PLAN_CONFIG.free;
+
+  // Billing / checkout (Stripe card + Cryptomus crypto).
+  const PURCHASABLE = ["starter", "growth", "business"];
+  const { data: billingConfig } = trpc.billing.config.useQuery();
+  const [payPlan, setPayPlan] = useState<string | null>(null);
+  const createCheckout = trpc.billing.createCheckout.useMutation({
+    onSuccess: (d) => { if (d?.url) window.location.href = d.url; },
+    onError: (e) => toast.error(e.message || "Could not start checkout"),
+  });
+  // Surface the result when the user returns from a payment provider.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const billing = params.get("billing");
+    if (billing === "success") {
+      toast.success("Payment received — your plan will update momentarily.");
+    } else if (billing === "cancelled") {
+      toast.info("Checkout cancelled — no charge was made.");
+    }
+    if (billing) {
+      params.delete("billing");
+      const qs = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
+    }
+  }, []);
+
+  const startCheckout = (provider: "stripe" | "cryptomus") => {
+    if (!payPlan) return;
+    createCheckout.mutate({ plan: payPlan as "starter" | "growth" | "business", provider });
+  };
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -687,10 +717,17 @@ export default function Settings() {
                         <div className="text-right">
                           <p className="font-bold text-foreground">{plan.price}</p>
                           {currentPlan !== key && (
-                            <Button size="sm" className="mt-2 h-7 text-xs" onClick={() => toast.info("Billing integration coming soon — contact support to upgrade")}>
-                              {key === "enterprise" ? "Contact Sales" : "Upgrade"}
-                              <ChevronRight className="w-3 h-3 ml-1" />
-                            </Button>
+                            PURCHASABLE.includes(key) ? (
+                              <Button size="sm" className="mt-2 h-7 text-xs" onClick={() => setPayPlan(key)}>
+                                Upgrade
+                                <ChevronRight className="w-3 h-3 ml-1" />
+                              </Button>
+                            ) : key === "enterprise" ? (
+                              <Button size="sm" variant="outline" className="mt-2 h-7 text-xs" onClick={() => toast.info("Contact sales@chatrico.com for enterprise pricing")}>
+                                Contact Sales
+                                <ChevronRight className="w-3 h-3 ml-1" />
+                              </Button>
+                            ) : null
                           )}
                         </div>
                       </div>
@@ -714,6 +751,43 @@ export default function Settings() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Payment-method picker */}
+            <Dialog open={!!payPlan} onOpenChange={(o) => { if (!o) setPayPlan(null); }}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>
+                    Upgrade to {payPlan ? PLAN_CONFIG[payPlan as keyof typeof PLAN_CONFIG]?.name : ""}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {payPlan ? PLAN_CONFIG[payPlan as keyof typeof PLAN_CONFIG]?.price : ""} · Choose how you'd like to pay.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3 pt-2">
+                  {billingConfig?.stripe && (
+                    <Button className="w-full justify-start gap-3 h-12" variant="outline" disabled={createCheckout.isPending} onClick={() => startCheckout("stripe")}>
+                      {createCheckout.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+                      <div className="text-left">
+                        <p className="text-sm font-medium">Credit / Debit Card</p>
+                        <p className="text-xs text-muted-foreground">Secure recurring payment via Stripe</p>
+                      </div>
+                    </Button>
+                  )}
+                  {billingConfig?.cryptomus && (
+                    <Button className="w-full justify-start gap-3 h-12" variant="outline" disabled={createCheckout.isPending} onClick={() => startCheckout("cryptomus")}>
+                      {createCheckout.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bitcoin className="w-4 h-4" />}
+                      <div className="text-left">
+                        <p className="text-sm font-medium">Cryptocurrency</p>
+                        <p className="text-xs text-muted-foreground">Pay with crypto via Cryptomus</p>
+                      </div>
+                    </Button>
+                  )}
+                  {!billingConfig?.stripe && !billingConfig?.cryptomus && (
+                    <p className="text-sm text-muted-foreground">Online payments aren't enabled yet. Please contact support to upgrade.</p>
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
           </div>
         )}
 

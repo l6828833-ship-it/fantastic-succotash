@@ -44,4 +44,16 @@ export const ENV = {
   // The From address shown to recipients, and an optional display name.
   emailFrom: process.env.EMAIL_FROM ?? "",
   emailFromName: process.env.EMAIL_FROM_NAME ?? "",
+
+  // ─── Payments / Billing ────────────────────────────────────────────────────
+  // Stripe (card, recurring subscriptions). Create keys at dashboard.stripe.com.
+  // STRIPE_WEBHOOK_SECRET is the signing secret of the webhook endpoint pointed
+  // at POST /api/billing/stripe/webhook.
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
+  // Cryptomus (crypto). From your Cryptomus merchant dashboard: the merchant
+  // UUID and the payment API key. Webhook points at POST /api/billing/cryptomus/webhook.
+  cryptomusMerchantId: process.env.CRYPTOMUS_MERCHANT_ID ?? "",
+  cryptomusApiKey: process.env.CRYPTOMUS_API_KEY ?? "",
 };
+

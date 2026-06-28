@@ -5,6 +5,15 @@ import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import {
+  isStripeConfigured,
+  isCryptomusConfigured,
+  isPurchasablePlan,
+  createStripeCheckout,
+  createCryptomusInvoice,
+  PURCHASABLE_PLANS,
+} from "./_core/billing";
+import { requestBaseUrl } from "./_core/email";
 import { invokeLLM, type Message as LLMMessage } from "./_core/llm";
 import { ENV } from "./_core/env";
 import {
@@ -1256,6 +1265,57 @@ const adminRouter = router({
     .query(async ({ input }) => db.getReferralsByAffiliate(input.affiliateId)),
 });
 
+// ─── Billing Router ───────────────────────────────────────────────────────────
+const billingRouter = router({
+  // Which payment methods are available (so the UI only shows configured ones).
+  config: publicProcedure.query(() => ({
+    stripe: isStripeConfigured(),
+    cryptomus: isCryptomusConfigured(),
+    plans: PURCHASABLE_PLANS,
+  })),
+  // Start a checkout for the chosen plan + provider; returns a redirect URL.
+  createCheckout: protectedProcedure
+    .input(z.object({
+      plan: z.enum(["starter", "growth", "business"]),
+      provider: z.enum(["stripe", "cryptomus"]),
+    }))
+    .mutation(async ({ ctx, input }) => {
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) throw new TRPCError({ code: "BAD_REQUEST", message: "No workspace found" });
+      if (!isPurchasablePlan(input.plan)) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: "This plan is not purchasable" });
+      }
+      const baseUrl = requestBaseUrl(ctx.req);
+      try {
+        if (input.provider === "stripe") {
+          if (!isStripeConfigured()) {
+            throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Card payments are not configured yet." });
+          }
+          const { url } = await createStripeCheckout({
+            workspaceId: workspace.id,
+            plan: input.plan,
+            baseUrl,
+            email: ctx.user.email,
+          });
+          return { url };
+        }
+        if (!isCryptomusConfigured()) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Crypto payments are not configured yet." });
+        }
+        const { url } = await createCryptomusInvoice({
+          workspaceId: workspace.id,
+          plan: input.plan,
+          baseUrl,
+        });
+        return { url };
+      } catch (err) {
+        if (err instanceof TRPCError) throw err;
+        console.error("[Billing] checkout failed", err);
+        throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Could not start checkout. Please try again." });
+      }
+    }),
+});
+
 // ─── App Router ───────────────────────────────────────────────────────────────
 export const appRouter = router({
   system: systemRouter,
@@ -1283,6 +1343,7 @@ export const appRouter = router({
   upload: uploadRouter,
   affiliate: affiliateRouter,
   admin: adminRouter,
+  billing: billingRouter,
 });
 
 export type AppRouter = typeof appRouter;

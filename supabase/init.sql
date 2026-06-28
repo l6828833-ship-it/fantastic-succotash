@@ -332,3 +332,19 @@ CREATE TABLE IF NOT EXISTS "referrals" (
   "status" text DEFAULT 'pending',
   "createdAt" timestamptz NOT NULL DEFAULT now()
 );
+
+
+-- Payments: one row per checkout (Stripe card or Cryptomus crypto). Created
+-- "pending" at checkout start, flipped to "paid" by the provider webhook.
+CREATE TABLE IF NOT EXISTS "payments" (
+  "id" serial PRIMARY KEY,
+  "workspaceId" integer NOT NULL,
+  "provider" varchar(32) NOT NULL,
+  "externalId" varchar(255),
+  "plan" varchar(64) NOT NULL,
+  "amountCents" integer DEFAULT 0,
+  "status" varchar(32) DEFAULT 'pending',
+  "createdAt" timestamptz NOT NULL DEFAULT now(),
+  "updatedAt" timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS "payments_externalId_idx" ON "payments" ("externalId");
