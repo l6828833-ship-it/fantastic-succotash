@@ -14,7 +14,7 @@ import {
   cancelStripeSubscription,
   PURCHASABLE_PLANS,
 } from "./_core/billing";
-import { requestBaseUrl } from "./_core/email";
+import { requestBaseUrl, isEmailConfigured } from "./_core/email";
 import { invokeLLM, type Message as LLMMessage } from "./_core/llm";
 import { ENV } from "./_core/env";
 import {
@@ -1365,6 +1365,39 @@ const adminRouter = router({
     items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
     return items.slice(0, 120);
   }),
+
+  // ─── Revenue / MRR summary ──────────────────────────────────────────────────
+  revenue: adminProcedure.query(async () => {
+    const [allWs, pays] = await Promise.all([db.getAllWorkspaces(), db.getAllPayments(1000)]);
+    const paidPlans = ["starter", "pro", "business"];
+    let mrrCents = 0;
+    let activePaid = 0;
+    const planCounts: Record<string, number> = {};
+    for (const w of allWs) {
+      const plan = w.plan ?? "free";
+      planCounts[plan] = (planCounts[plan] ?? 0) + 1;
+      const normalized = plan === "growth" ? "pro" : plan;
+      if (paidPlans.includes(normalized)) {
+        mrrCents += db.planPriceCents(plan);
+        activePaid++;
+      }
+    }
+    const paid = pays.filter((p) => p.status === "paid");
+    const collectedAllTimeCents = paid.reduce((s, p) => s + (p.amountCents ?? 0), 0);
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const collectedThisMonthCents = paid
+      .filter((p) => new Date(p.createdAt as unknown as string) >= monthStart)
+      .reduce((s, p) => s + (p.amountCents ?? 0), 0);
+    return { mrrCents, activePaid, collectedAllTimeCents, collectedThisMonthCents, planCounts };
+  }),
+
+  // ─── System health: which integrations are configured ──────────────────────
+  health: adminProcedure.query(() => ({
+    stripe: isStripeConfigured(),
+    cryptomus: isCryptomusConfigured(),
+    email: isEmailConfigured(),
+  })),
 });
 
 // ─── Billing Router ───────────────────────────────────────────────────────────

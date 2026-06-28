@@ -53,8 +53,11 @@ export default function Admin() {
   const { data: payments = [] } = trpc.admin.payments.useQuery(undefined, { enabled: isAdmin });
   const { data: usageRows = [] } = trpc.admin.usage.useQuery(undefined, { enabled: isAdmin });
   const { data: activity = [] } = trpc.admin.activity.useQuery(undefined, { enabled: isAdmin });
+  const { data: revenue } = trpc.admin.revenue.useQuery(undefined, { enabled: isAdmin });
+  const { data: health } = trpc.admin.health.useQuery(undefined, { enabled: isAdmin });
   const [adjDrafts, setAdjDrafts] = useState<Record<number, string>>({});
   const [viewAff, setViewAff] = useState<{ id: number; label: string } | null>(null);
+  const [search, setSearch] = useState({ users: "", ws: "", billing: "", usage: "" });
   const { data: affReferrals = [] } = trpc.admin.affiliateReferrals.useQuery(
     { affiliateId: viewAff?.id ?? 0 },
     { enabled: isAdmin && !!viewAff },
@@ -104,6 +107,13 @@ export default function Admin() {
   const cell = (u: Usage) => `${u.used}${u.limit != null ? ` / ${u.limit}` : " / ∞"}`;
   const paidTotal = payList.filter((p) => p.status === "paid").reduce((s, p) => s + (p.amountCents ?? 0), 0);
 
+  // Client-side search filters per tab.
+  const inc = (hay: string, needle: string) => hay.toLowerCase().includes(needle.trim().toLowerCase());
+  const filteredUsers = userList.filter((u) => !search.users || inc(`${u.name ?? ""} ${u.email ?? ""}`, search.users));
+  const filteredWs = wsList.filter((w) => !search.ws || inc(`${w.companyName ?? ""} ${ownerEmail(w.userId)} ${w.plan ?? ""}`, search.ws));
+  const filteredPays = payList.filter((p) => !search.billing || inc(`${p.workspaceName ?? ""} ${p.ownerEmail ?? ""} ${p.plan} ${p.provider} ${p.status ?? ""}`, search.billing));
+  const filteredUsage = usageList.filter((w) => !search.usage || inc(`${w.workspaceName ?? ""} ${w.ownerEmail ?? ""} ${w.plan}`, search.usage));
+
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
       <div className="flex items-center gap-3">
@@ -125,6 +135,51 @@ export default function Admin() {
         <StatCard label="Contacts" value={stats?.contacts ?? 0} icon={Contact} />
       </div>
 
+      {/* Revenue + system health */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+        <Card className="border-border lg:col-span-3">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground">MRR</p>
+                <p className="text-xl font-bold text-foreground">{money(revenue?.mrrCents)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Active paid</p>
+                <p className="text-xl font-bold text-foreground">{revenue?.activePaid ?? 0}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Collected (mo)</p>
+                <p className="text-xl font-bold text-foreground">{money(revenue?.collectedThisMonthCents)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Collected (all time)</p>
+                <p className="text-xl font-bold text-foreground">{money(revenue?.collectedAllTimeCents)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-border">
+          <CardContent className="p-4">
+            <p className="text-xs text-muted-foreground mb-2">System health</p>
+            <div className="space-y-1.5">
+              {[
+                { label: "Stripe", ok: health?.stripe },
+                { label: "Cryptomus", ok: health?.cryptomus },
+                { label: "Email", ok: health?.email },
+              ].map((h) => (
+                <div key={h.label} className="flex items-center justify-between text-sm">
+                  <span className="text-foreground">{h.label}</span>
+                  <Badge variant="outline" className={cn("text-xs", h.ok ? "bg-green-500/10 text-green-600 border-green-200" : "bg-muted text-muted-foreground")}>
+                    {h.ok ? "Configured" : "Not set"}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       <Tabs defaultValue="users">
         <TabsList>
           <TabsTrigger value="users" className="gap-1.5 text-xs"><Users className="w-3.5 h-3.5" />Users ({userList.length})</TabsTrigger>
@@ -137,6 +192,7 @@ export default function Admin() {
         </TabsList>
 
         <TabsContent value="users" className="mt-4">
+          <Input placeholder="Search users by name or email…" value={search.users} onChange={(e) => setSearch((s) => ({ ...s, users: e.target.value }))} className="mb-3 max-w-sm h-9 text-sm" />
           <Card className="border-border">
             <CardContent className="p-0">
               <table className="w-full text-sm">
@@ -149,7 +205,7 @@ export default function Admin() {
                   </tr>
                 </thead>
                 <tbody>
-                  {userList.map((u) => (
+                  {filteredUsers.map((u) => (
                     <tr key={u.id} className="border-t border-border">
                       <td className="px-4 py-2.5">
                         <p className="font-medium text-foreground">{u.name ?? "Unnamed"}</p>
@@ -181,6 +237,7 @@ export default function Admin() {
         </TabsContent>
 
         <TabsContent value="workspaces" className="mt-4">
+          <Input placeholder="Search workspaces by name, owner or plan…" value={search.ws} onChange={(e) => setSearch((s) => ({ ...s, ws: e.target.value }))} className="mb-3 max-w-sm h-9 text-sm" />
           <Card className="border-border">
             <CardContent className="p-0">
               <table className="w-full text-sm">
@@ -192,7 +249,7 @@ export default function Admin() {
                   </tr>
                 </thead>
                 <tbody>
-                  {wsList.map((w) => (
+                  {filteredWs.map((w) => (
                     <tr key={w.id} className="border-t border-border">
                       <td className="px-4 py-2.5 font-medium text-foreground">{w.companyName ?? `Workspace #${w.id}`}</td>
                       <td className="px-3 py-2.5 hidden sm:table-cell text-muted-foreground">{ownerEmail(w.userId)}</td>
@@ -350,6 +407,7 @@ export default function Admin() {
           </Card>
         </TabsContent>
         <TabsContent value="billing" className="mt-4">
+          <Input placeholder="Search transactions by workspace, owner, plan, provider or status…" value={search.billing} onChange={(e) => setSearch((s) => ({ ...s, billing: e.target.value }))} className="mb-3 max-w-md h-9 text-sm" />
           <Card className="border-border">
             <CardContent className="p-4 flex items-center gap-2 border-b border-border">
               <DollarSign className="w-4 h-4 text-green-600" />
@@ -368,9 +426,9 @@ export default function Admin() {
                   </tr>
                 </thead>
                 <tbody>
-                  {payList.length === 0 ? (
+                  {filteredPays.length === 0 ? (
                     <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No transactions yet</td></tr>
-                  ) : payList.map((p) => (
+                  ) : filteredPays.map((p) => (
                     <tr key={p.id} className="border-t border-border">
                       <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{fmtDateTime(p.createdAt)}</td>
                       <td className="px-3 py-2.5">
@@ -397,6 +455,7 @@ export default function Admin() {
         </TabsContent>
 
         <TabsContent value="usage" className="mt-4">
+          <Input placeholder="Search by workspace, owner or plan…" value={search.usage} onChange={(e) => setSearch((s) => ({ ...s, usage: e.target.value }))} className="mb-3 max-w-sm h-9 text-sm" />
           <Card className="border-border">
             <CardContent className="p-0 overflow-x-auto">
               <table className="w-full text-sm">
@@ -412,9 +471,9 @@ export default function Admin() {
                   </tr>
                 </thead>
                 <tbody>
-                  {usageList.length === 0 ? (
+                  {filteredUsage.length === 0 ? (
                     <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No workspaces</td></tr>
-                  ) : usageList.map((w) => (
+                  ) : filteredUsage.map((w) => (
                     <tr key={w.workspaceId} className="border-t border-border">
                       <td className="px-4 py-2.5">
                         <p className="font-medium text-foreground">{w.workspaceName ?? `Workspace #${w.workspaceId}`}</p>
