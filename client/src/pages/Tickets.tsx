@@ -464,7 +464,7 @@ export default function Tickets() {
                 <div className="flex items-center gap-2 h-8 px-3 rounded-md border border-input bg-background text-xs">
                   <User className="w-3 h-3 text-muted-foreground shrink-0" />
                   {selectedTicket.assignedUserId ? (
-                    <span className="text-foreground truncate">Agent #{selectedTicket.assignedUserId}</span>
+                    <span className="text-foreground truncate">{selectedTicket.assignedUserId === user?.id ? "You" : `Agent #${selectedTicket.assignedUserId}`}</span>
                   ) : (
                     <span className="text-muted-foreground">Unassigned</span>
                   )}
