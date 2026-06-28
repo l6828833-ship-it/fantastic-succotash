@@ -7,6 +7,7 @@ import {
   InsertUser,
   affiliates,
   agents,
+  authOtps,
   cannedResponses,
   campaigns,
   contacts,
@@ -173,6 +174,40 @@ export async function createUser(data: typeof users.$inferInsert) {
   if (!db) throw new Error("DB not available");
   const [row] = await db.insert(users).values(data).returning();
   return row;
+}
+
+// ─── Auth OTP codes ───────────────────────────────────────────────────────────
+export async function createAuthOtp(data: typeof authOtps.$inferInsert) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  // Only one active code per email+purpose: clear any previous ones first.
+  await db.delete(authOtps).where(and(eq(authOtps.email, data.email), eq(authOtps.purpose, data.purpose ?? "signup")));
+  const [row] = await db.insert(authOtps).values(data).returning();
+  return row;
+}
+
+export async function getLatestAuthOtp(email: string, purpose: "signup" | "reset") {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select()
+    .from(authOtps)
+    .where(and(eq(authOtps.email, email), eq(authOtps.purpose, purpose)))
+    .orderBy(desc(authOtps.createdAt))
+    .limit(1);
+  return result[0];
+}
+
+export async function bumpAuthOtpAttempts(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(authOtps).set({ attempts: sql`${authOtps.attempts} + 1` }).where(eq(authOtps.id, id));
+}
+
+export async function deleteAuthOtp(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.delete(authOtps).where(eq(authOtps.id, id));
 }
 
 // ─── Workspaces ───────────────────────────────────────────────────────────────

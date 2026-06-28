@@ -10,11 +10,11 @@ import * as db from "../db";
 let _transporter: Transporter | null = null;
 
 export function isEmailConfigured(): boolean {
-  return Boolean(ENV.smtpHost && ENV.emailFrom);
+  return Boolean(ENV.emailFrom && (ENV.brevoApiKey || ENV.smtpHost));
 }
 
 function getTransporter(): Transporter | null {
-  if (!isEmailConfigured()) return null;
+  if (!ENV.smtpHost || !ENV.emailFrom) return null;
   if (_transporter) return _transporter;
   _transporter = nodemailer.createTransport({
     host: ENV.smtpHost,
@@ -32,7 +32,39 @@ export interface EmailMessage {
   text?: string;
 }
 
+// Send via the Brevo HTTP API. Preferred on hosts that block outbound SMTP
+// ports (e.g. Railway), since it's a plain HTTPS request.
+async function sendViaBrevo(msg: EmailMessage): Promise<void> {
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key": ENV.brevoApiKey,
+      "content-type": "application/json",
+      accept: "application/json",
+    },
+    body: JSON.stringify({
+      sender: { email: ENV.emailFrom, name: ENV.emailFromName || "Chatrico" },
+      to: [{ email: msg.to }],
+      subject: msg.subject,
+      htmlContent: msg.html,
+      ...(msg.text ? { textContent: msg.text } : {}),
+    }),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`Brevo send failed (${res.status}): ${detail.slice(0, 300)}`);
+  }
+}
+
 export async function sendEmail(msg: EmailMessage): Promise<void> {
+  if (!isEmailConfigured()) {
+    throw new Error("Email is not configured (set BREVO_API_KEY + EMAIL_FROM, or SMTP_HOST + EMAIL_FROM)");
+  }
+  // Prefer the Brevo HTTP API when a key is present; otherwise use SMTP.
+  if (ENV.brevoApiKey) {
+    await sendViaBrevo(msg);
+    return;
+  }
   const transporter = getTransporter();
   if (!transporter) throw new Error("Email is not configured (set SMTP_HOST and EMAIL_FROM)");
   const from = ENV.emailFromName ? `"${ENV.emailFromName}" <${ENV.emailFrom}>` : ENV.emailFrom;
