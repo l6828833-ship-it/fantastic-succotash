@@ -148,9 +148,12 @@ const WIDGET_JS = `(function(){
       + ".cbp-lead .cbp-start{border:none;border-radius:10px;color:#fff;padding:11px;font-size:14px;font-weight:600;cursor:pointer;margin-top:4px;}"
       + ".cbp-lead .cbp-start:disabled{opacity:.6;cursor:default;}"
       + ".cbp-lead .cbp-err{color:#ef4444;font-size:12px;min-height:14px;}"
-      + ".cbp-head .cbp-ticket{margin-left:auto;background:none;border:none;color:#fff;cursor:pointer;opacity:.85;display:flex;align-items:center;padding:0;}"
+      + ".cbp-head .cbp-ticket{margin-left:auto;background:none;border:none;color:#fff;cursor:pointer;opacity:.9;display:flex;align-items:center;justify-content:center;padding:0;}"
       + ".cbp-head .cbp-ticket:hover{opacity:1;}"
-      + ".cbp-head .cbp-ticket svg{width:18px;height:18px;fill:#fff;}"
+      + ".cbp-head .cbp-ticket svg{width:20px;height:20px;fill:#fff;}"
+      + ".cbp-offer-btn{align-self:flex-start;display:inline-flex;align-items:center;gap:7px;border:none;border-radius:10px;color:#fff;padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 6px rgba(0,0,0,.12);}"
+      + ".cbp-offer-btn:hover{filter:brightness(1.06);}"
+      + ".cbp-offer-btn svg{width:15px;height:15px;fill:#fff;}"
       + ".cbp-lead textarea{width:100%;box-sizing:border-box;border:1px solid " + border + ";background:" + bg + ";color:" + fg + ";border-radius:10px;padding:10px 12px;font-size:14px;outline:none;resize:vertical;min-height:84px;font-family:inherit;}";
   }
 
@@ -199,11 +202,13 @@ const WIDGET_JS = `(function(){
   var closeBtn = document.createElement("button");
   closeBtn.className = "cbp-x";
   closeBtn.innerHTML = "&times;";
+  // Clean, modern ticket icon (filled, so it inherits fill:#fff via CSS).
+  var TICKET_SVG = '<svg viewBox="0 0 24 24"><path d="M4 5h16a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4V7a2 2 0 0 1 2-2zm5 4a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2H9zm0 4a1 1 0 0 0 0 2h6a1 1 0 0 0 0-2H9z"/></svg>';
   var ticketBtn = document.createElement("button");
   ticketBtn.className = "cbp-ticket";
   ticketBtn.setAttribute("title", "Open a ticket");
   ticketBtn.style.display = "none";
-  ticketBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M20 4H4a2 2 0 0 0-2 2v3a2 2 0 0 1 0 4v3a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-3a2 2 0 0 1 0-4V6a2 2 0 0 0-2-2zm-9 13H7v-2h4v2zm0-4H7v-2h4v2z"/></svg>';
+  ticketBtn.innerHTML = TICKET_SVG;
   closeBtn.style.marginLeft = "4px";
   head.appendChild(avatar);
   head.appendChild(nameEl);
@@ -273,16 +278,29 @@ const WIDGET_JS = `(function(){
 
   // Reveal the ticket button without posting a message (caller handles messaging).
   function revealTicketButton(){
-    if (ticketOffered) return;
     ticketOffered = true;
     ticketBtn.style.display = "flex";
+  }
+
+  // Show a clickable "Open a ticket" button inside the chat. The visitor taps it
+  // to reveal the ticket form — we never force the form open. Optional text is
+  // shown as a short bot line above the button.
+  function addTicketOffer(text){
+    if (text){ addMsg("bot", text); }
+    var b = document.createElement("button");
+    b.className = "cbp-offer-btn";
+    b.style.background = color;
+    b.innerHTML = TICKET_SVG + "<span>Open a ticket</span>";
+    b.addEventListener("click", function(){ showTicketForm(); });
+    body.appendChild(b);
+    body.scrollTop = body.scrollHeight;
   }
 
   // Reveal the ticket option now (used immediately or after the wait timer).
   function offerTicketNow(){
     if (ticketOffered || humanReplied) return;
     revealTicketButton();
-    addMsg("bot", "No one's available to continue right now. You can open a support ticket and we'll get back to you by email.");
+    addTicketOffer("No one's available to continue right now. Open a support ticket and we'll get back to you by email.");
   }
 
   // Offer a ticket after ticketDelaySeconds, unless a human replies first.
@@ -465,7 +483,8 @@ const WIDGET_JS = `(function(){
           // No human online right now — show the offline message and offer a
           // ticket, NOT the "connecting you to our team" escalation notice.
           if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", data.offlineMessage || "No one's available right now. Leave a ticket and we'll get back to you by email."); }
-          if (ticketMode !== "off"){ revealTicketButton(); }
+          // Give the visitor an easy in-chat button to open the ticket form.
+          if (ticketMode !== "off" && !ticketOffered){ revealTicketButton(); addTicketOffer(null); }
         } else {
           // A human will answer from the Inbox; their reply arrives via polling.
           if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", notice || "You're connected to our team — someone will reply right here shortly."); }
