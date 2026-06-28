@@ -117,6 +117,17 @@ const workspaceRouter = router({
         await db.createWorkspace({ userId: ctx.user.id });
         workspace = await db.getWorkspaceByUserId(ctx.user.id);
       }
+      // Email branding is a paid (Pro+) feature — never persist those fields on
+      // a plan that doesn't include it (defense in depth alongside the apply
+      // gate in getWorkspaceEmailBranding).
+      const planForFeatures = input.plan ?? workspace!.plan;
+      if (!db.planHasFeature(planForFeatures, "emailBranding")) {
+        delete input.emailBrandName;
+        delete input.emailLogoUrl;
+        delete input.emailBrandColor;
+        delete input.supportEmail;
+        delete input.emailSignature;
+      }
       await db.updateWorkspace(workspace!.id, input);
       // If this update upgraded the plan to a paid tier, credit the referring
       // affiliate for the sale (no-op for free plans or non-referred workspaces).
@@ -164,6 +175,11 @@ const agentRouter = router({
           });
         }
       }
+      // Human handoff / live inbox is a paid (Starter+) feature — keep lower
+      // plans on AI-only handoff.
+      if (input.handoffMode && input.handoffMode !== "ai_only" && !db.planHasFeature(workspace.plan, "humanHandoff")) {
+        input.handoffMode = "ai_only";
+      }
       return db.createAgent({ ...input, workspaceId: workspace.id });
     }),
   update: protectedProcedure
@@ -200,8 +216,15 @@ const agentRouter = router({
       customCss: z.string().optional().nullable(),
       isActive: z.boolean().optional(),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
       const { id, ...data } = input;
+      // Human handoff / live inbox is a paid (Starter+) feature.
+      if (data.handoffMode && data.handoffMode !== "ai_only") {
+        const ws = await db.getWorkspaceByUserId(ctx.user.id);
+        if (!db.planHasFeature(ws?.plan, "humanHandoff")) {
+          data.handoffMode = "ai_only";
+        }
+      }
       return db.updateAgent(id, data);
     }),
   delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => {
@@ -276,6 +299,13 @@ const knowledgeRouter = router({
     .mutation(async ({ ctx, input }) => {
       const workspace = await db.getWorkspaceByUserId(ctx.user.id);
       if (!workspace) throw new TRPCError({ code: "BAD_REQUEST" });
+      // "Learn from website URL" is a paid (Starter+) feature.
+      if (!db.planHasFeature(workspace.plan, "learnFromWebsite")) {
+        throw new TRPCError({
+          code: "FORBIDDEN",
+          message: "Learning from a website URL is available on the Starter plan and above. Upgrade to use it.",
+        });
+      }
       let html = "";
       try {
         const controller = new AbortController();

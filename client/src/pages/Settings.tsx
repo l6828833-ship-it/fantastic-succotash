@@ -219,6 +219,7 @@ export default function Settings() {
     onError: (e) => toast.error(e.message || "Could not cancel the subscription"),
   });
   const [showAllFeatures, setShowAllFeatures] = useState(false);
+  const [expandedPlans, setExpandedPlans] = useState<Record<string, boolean>>({});
   // Where the current plan sits in the tier order (legacy "growth" → "pro").
   const planTier = currentPlan === "growth" ? "pro" : currentPlan;
   const planIdx = Math.max(0, PLAN_ORDER.indexOf(planTier));
@@ -489,6 +490,21 @@ export default function Settings() {
                 Customize the transactional emails customers receive (ticket confirmations, etc.). Emails are sent from Chatrico for reliable delivery, with replies going to your support address.
               </p>
             </div>
+
+            {!["pro", "growth", "business", "enterprise"].includes(currentPlan) && (
+              <Card className="border-primary/30 bg-primary/5">
+                <CardContent className="p-4 flex items-start gap-3">
+                  <Lock className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">Email branding is a Pro feature</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">On your current plan, customer emails use the default Chatrico branding. Upgrade to Pro to use your own logo, colors, reply-to address and signature.</p>
+                  </div>
+                  <Button size="sm" className="h-8 text-xs shrink-0" onClick={() => showUpgrade("Email branding (logo, reply-to, signature) is available on the Pro plan and above.")}>
+                    Upgrade
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Form */}
@@ -881,7 +897,7 @@ export default function Settings() {
               <h4 className="text-sm font-semibold text-foreground mb-3">Available Plans</h4>
               <div className="grid gap-3">
                 {Object.entries(PLAN_CONFIG).map(([key, plan]) => (
-                  <Card key={key} className={cn("border-border cursor-pointer transition-all hover:shadow-md", currentPlan === key && "ring-2 ring-primary")}>
+                  <Card key={key} className={cn("border-border transition-all hover:shadow-md", currentPlan === key && "ring-2 ring-primary")}>
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
                         <div>
@@ -889,7 +905,6 @@ export default function Settings() {
                             <p className="font-semibold text-foreground">{plan.name}</p>
                             {currentPlan === key && <Badge className="text-xs bg-primary/10 text-primary border-primary/20">Current</Badge>}
                           </div>
-                          <p className="text-sm text-muted-foreground mt-0.5">{plan.features.slice(0, 2).join(" · ")}</p>
                         </div>
                         <div className="text-right">
                           <p className="font-bold text-foreground">{plan.price}</p>
@@ -908,6 +923,25 @@ export default function Settings() {
                           )}
                         </div>
                       </div>
+                      {/* A few key features, with a per-plan "See all" expander. */}
+                      <ul className="mt-3 space-y-1.5">
+                        {(expandedPlans[key] ? plan.features : plan.features.slice(0, 4)).map((f) => (
+                          <li key={f} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-green-500 mt-0.5 shrink-0" />
+                            {f}
+                          </li>
+                        ))}
+                      </ul>
+                      {plan.features.length > 4 && (
+                        <button
+                          type="button"
+                          onClick={() => setExpandedPlans((prev) => ({ ...prev, [key]: !prev[key] }))}
+                          className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                        >
+                          {expandedPlans[key] ? "Show less" : `See all ${plan.features.length} features`}
+                          <ChevronDown className={"w-3.5 h-3.5 transition-transform " + (expandedPlans[key] ? "rotate-180" : "")} />
+                        </button>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
