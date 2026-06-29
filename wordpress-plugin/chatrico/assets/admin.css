@@ -1,0 +1,83 @@
+/* Chatrico admin styling — kept light so it blends with WordPress. */
+
+.chatrico-wrap {
+	max-width: 1100px;
+}
+
+.chatrico-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 23px;
+}
+
+.chatrico-logo {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	border-radius: 8px;
+	background: #6366f1;
+	color: #fff;
+	font-size: 16px;
+}
+
+.chatrico-sub {
+	margin: 2px 0 0;
+	color: #646970;
+}
+
+.chatrico-notice {
+	margin: 14px 0;
+}
+
+.chatrico-card {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 10px;
+	padding: 8px 20px 20px;
+	margin-top: 16px;
+}
+
+.chatrico-help ol {
+	margin-left: 18px;
+	line-height: 1.9;
+}
+
+/* Embedded view header (title + open button) */
+.chatrico-view-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	flex-wrap: wrap;
+}
+
+.chatrico-embed-hint p {
+	margin: 8px 0;
+}
+
+/* The iframe holding the embedded Chatrico page */
+.chatrico-frame-wrap {
+	margin-top: 12px;
+	border: 1px solid #dcdcde;
+	border-radius: 10px;
+	overflow: hidden;
+	background: #f6f7f7;
+}
+
+.chatrico-frame {
+	display: block;
+	width: 100%;
+	height: calc(100vh - 230px);
+	min-height: 520px;
+	border: 0;
+}
+
+@media screen and (max-width: 782px) {
+	.chatrico-frame {
+		height: calc(100vh - 260px);
+		min-height: 460px;
+	}
+}
