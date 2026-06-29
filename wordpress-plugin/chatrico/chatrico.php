@@ -4,7 +4,7 @@
  * Plugin URI:        https://chatrico.com/wordpress-plugin
  * Description:        AI chat bot and live chat for your website. Answer customers 24/7, capture leads, hand off to a human, and track usage — set up in minutes.
  * Version:           1.0.0
- * Author:            Chatrico
+ * Author:            aymen lasfar
  * Author URI:        https://chatrico.com
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
