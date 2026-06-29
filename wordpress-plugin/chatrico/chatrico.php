@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:       Chatrico – AI Chat Bot & Live Chat
- * Plugin URI:        https://chatrico.com
+ * Plugin URI:        https://chatrico.com/wordpress-plugin
  * Description:        AI chat bot and live chat for your website. Answer customers 24/7, capture leads, hand off to a human, and track usage — set up in minutes.
  * Version:           1.0.0
  * Author:            Chatrico
