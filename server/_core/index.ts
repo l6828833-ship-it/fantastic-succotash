@@ -7,6 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { registerLocalAuthRoutes } from "./localAuth";
 import { registerStorageProxy } from "./storageProxy";
 import { registerWidgetRoutes } from "./widget";
+import { registerPluginRoutes } from "./plugin";
 import { registerEmailRoutes } from "./email";
 import { registerBillingRoutes } from "./billing";
 import { appRouter } from "../routers";
@@ -50,6 +51,7 @@ async function startServer() {
   registerOAuthRoutes(app);
   registerLocalAuthRoutes(app);
   registerWidgetRoutes(app);
+  registerPluginRoutes(app);
   registerEmailRoutes(app);
   // tRPC API
   app.use(
