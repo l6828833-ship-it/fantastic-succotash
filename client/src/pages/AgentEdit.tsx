@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import {
   Bot, Save, ArrowLeft, Play, Settings, Palette, Brain, Users, Clock, MessageSquare, Zap, Shield, Globe, ChevronRight, Upload, Loader2,
-  MessageCircle, HelpCircle, Sparkles, Bell, Phone, Heart, Lock,
+  MessageCircle, HelpCircle, Sparkles, Bell, Phone, Heart, Lock, BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import { Separator } from "@/components/ui/separator";
 import { Slider } from "@/components/ui/slider";
 import { toast } from "sonner";
 import { Link } from "wouter";
+import AgentKnowledge from "@/components/AgentKnowledge";
 
 interface AgentEditProps { agentId: number; }
 
@@ -259,8 +260,9 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
       </div>
 
       <Tabs defaultValue="behavior">
-        <TabsList className="grid grid-cols-5 w-full max-w-2xl">
+        <TabsList className="grid grid-cols-6 w-full max-w-3xl">
           <TabsTrigger value="behavior" className="gap-1.5 text-xs"><Brain className="w-3.5 h-3.5" />Behavior</TabsTrigger>
+          <TabsTrigger value="knowledge" className="gap-1.5 text-xs"><BookOpen className="w-3.5 h-3.5" />Knowledge</TabsTrigger>
           <TabsTrigger value="handoff" className="gap-1.5 text-xs"><Users className="w-3.5 h-3.5" />Handoff</TabsTrigger>
           <TabsTrigger value="style" className="gap-1.5 text-xs"><Palette className="w-3.5 h-3.5" />Style</TabsTrigger>
           <TabsTrigger value="hours" className="gap-1.5 text-xs"><Clock className="w-3.5 h-3.5" />Hours</TabsTrigger>
@@ -417,6 +419,19 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
                   />
                 </div>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ─── KNOWLEDGE TAB ─── */}
+        <TabsContent value="knowledge" className="mt-6">
+          <Card className="border-border">
+            <CardHeader>
+              <CardTitle className="text-sm font-semibold flex items-center gap-2"><BookOpen className="w-4 h-4 text-primary" />Knowledge Base</CardTitle>
+              <CardDescription className="text-xs">Give this agent its own articles, Q&A pairs, and website content. This is what the AI reads to answer your customers.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AgentKnowledge agentId={agentId} canLearnFromWebsite={isPaidPlan} />
             </CardContent>
           </Card>
         </TabsContent>

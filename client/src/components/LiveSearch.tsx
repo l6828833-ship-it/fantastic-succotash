@@ -14,8 +14,8 @@ type SearchResult = {
 const TYPE_META: Record<SearchResult["type"], { icon: React.ElementType; href: (id: number) => string; color: string }> = {
   agent: { icon: Bot, href: (id) => `/agents/${id}`, color: "text-blue-600 bg-blue-500/10" },
   contact: { icon: Users, href: () => `/contacts`, color: "text-emerald-600 bg-emerald-500/10" },
-  article: { icon: FileText, href: () => `/knowledge`, color: "text-indigo-600 bg-indigo-500/10" },
-  qa: { icon: HelpCircle, href: () => `/knowledge`, color: "text-purple-600 bg-purple-500/10" },
+  article: { icon: FileText, href: () => `/agents`, color: "text-indigo-600 bg-indigo-500/10" },
+  qa: { icon: HelpCircle, href: () => `/agents`, color: "text-purple-600 bg-purple-500/10" },
   conversation: { icon: MessageSquare, href: () => `/inbox`, color: "text-orange-600 bg-orange-500/10" },
   campaign: { icon: Megaphone, href: () => `/campaigns`, color: "text-pink-600 bg-pink-500/10" },
 };

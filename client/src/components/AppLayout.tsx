@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 import {
   BarChart3,
   Bell,
-  BookOpen,
   Bot,
   Check,
   CheckCheck,
@@ -45,7 +44,6 @@ const navItems = [
   { href: "/inbox", icon: Inbox, label: "Inbox" },
   { href: "/tickets", icon: Ticket, label: "Tickets" },
   { href: "/contacts", icon: Users, label: "Contacts" },
-  { href: "/knowledge", icon: BookOpen, label: "Knowledge Base" },
   { href: "/analytics", icon: BarChart3, label: "Analytics" },
   { href: "/embed", icon: Code2, label: "Embed Code" },
   { href: "/affiliate", icon: Gift, label: "Affiliate" },

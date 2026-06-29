@@ -1,7 +1,8 @@
 import { trpc } from "@/lib/trpc";
-import { cn } from "@/lib/utils";
 import { useState } from "react";
-import { BookOpen, Plus, Search, Edit2, Trash2, FileText, CheckCircle2, MessageSquare, HelpCircle, Globe, Loader2, Bot, Users } from "lucide-react";
+import {
+  BookOpen, Plus, Search, Edit2, Trash2, FileText, MessageSquare, HelpCircle, Globe, Loader2, Lock,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,80 +10,77 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 
 const CATEGORIES = ["general", "billing", "technical", "onboarding", "policies", "faq"];
 
-export default function KnowledgeBase() {
-  // ── Articles state ──────────────────────────────────────────────────────────
+interface AgentKnowledgeProps {
+  /** The agent these knowledge items belong to. New items are scoped to it. */
+  agentId: number;
+  /** Whether "Learn from website" is available on the current plan (Starter+). */
+  canLearnFromWebsite: boolean;
+}
+
+/**
+ * Per-agent knowledge manager embedded in the Agent settings page.
+ * Lets the user add articles, Q&A pairs, and learn-from-website content that
+ * are attached directly to this agent (the AI uses these + any shared items).
+ */
+export default function AgentKnowledge({ agentId, canLearnFromWebsite }: AgentKnowledgeProps) {
   const [search, setSearch] = useState("");
+
+  // Article form state
   const [articleOpen, setArticleOpen] = useState(false);
   const [editingArticleId, setEditingArticleId] = useState<number | null>(null);
   const [articleTitle, setArticleTitle] = useState("");
   const [articleContent, setArticleContent] = useState("");
   const [articleCategory, setArticleCategory] = useState("general");
 
-  // ── Q&A state ───────────────────────────────────────────────────────────────
+  // Q&A form state
   const [qaOpen, setQaOpen] = useState(false);
   const [editingQaId, setEditingQaId] = useState<number | null>(null);
   const [qaQuestion, setQaQuestion] = useState("");
   const [qaAnswer, setQaAnswer] = useState("");
 
-  // ── Per-agent scoping + website import ───────────────────────────────────────
-  // "all" = everything, "shared" = applies to all agents (agentId null), or a
-  // specific agent id (as string). Used both to filter the list and as the
-  // default owner for newly created/imported knowledge.
-  const [agentScope, setAgentScope] = useState<string>("all");
+  // Website import
   const [websiteOpen, setWebsiteOpen] = useState(false);
   const [websiteUrl, setWebsiteUrl] = useState("");
 
-  const { data: agents } = trpc.agent.list.useQuery();
-  const agentName = (id?: number | null) => agents?.find((a) => a.id === id)?.name;
-  // The agentId assigned to new items: a specific agent when one is selected,
-  // otherwise undefined (= shared across all agents).
-  const createAgentId = /^\d+$/.test(agentScope) ? Number(agentScope) : undefined;
+  // Queries scoped to this agent (returns its own + shared workspace items)
+  const { data: articles, refetch: refetchArticles } = trpc.knowledge.listArticles.useQuery({ agentId });
+  const { data: qaPairs, refetch: refetchQA } = trpc.knowledge.listQA.useQuery({ agentId });
 
-  // ── Queries ─────────────────────────────────────────────────────────────────
-  const { data: articles, refetch: refetchArticles } = trpc.knowledge.listArticles.useQuery();
-  const { data: qaPairs, refetch: refetchQA } = trpc.knowledge.listQA.useQuery();
-
-  // ── Article mutations ────────────────────────────────────────────────────────
   const createArticle = trpc.knowledge.createArticle.useMutation({
-    onSuccess: () => { refetchArticles(); setArticleOpen(false); resetArticleForm(); toast.success("Article created!"); },
+    onSuccess: () => { refetchArticles(); setArticleOpen(false); resetArticleForm(); toast.success("Article added to this agent"); },
     onError: () => toast.error("Failed to create article"),
   });
   const updateArticle = trpc.knowledge.updateArticle.useMutation({
-    onSuccess: () => { refetchArticles(); setArticleOpen(false); resetArticleForm(); toast.success("Article updated!"); },
+    onSuccess: () => { refetchArticles(); setArticleOpen(false); resetArticleForm(); toast.success("Article updated"); },
     onError: () => toast.error("Failed to update article"),
   });
   const deleteArticle = trpc.knowledge.deleteArticle.useMutation({
     onSuccess: () => { refetchArticles(); toast.success("Article deleted"); },
     onError: () => toast.error("Failed to delete article"),
   });
-
-  // ── Q&A mutations ─────────────────────────────────────────────────────────────
   const createQA = trpc.knowledge.createQA.useMutation({
-    onSuccess: () => { refetchQA(); setQaOpen(false); resetQAForm(); toast.success("Q&A pair added!"); },
+    onSuccess: () => { refetchQA(); setQaOpen(false); resetQAForm(); toast.success("Q&A added to this agent"); },
     onError: () => toast.error("Failed to add Q&A pair"),
   });
   const updateQA = trpc.knowledge.updateQA.useMutation({
-    onSuccess: () => { refetchQA(); setQaOpen(false); resetQAForm(); toast.success("Q&A updated!"); },
+    onSuccess: () => { refetchQA(); setQaOpen(false); resetQAForm(); toast.success("Q&A updated"); },
     onError: () => toast.error("Failed to update Q&A"),
   });
   const deleteQA = trpc.knowledge.deleteQA.useMutation({
     onSuccess: () => { refetchQA(); toast.success("Q&A deleted"); },
     onError: () => toast.error("Failed to delete Q&A"),
   });
-
   const importFromUrl = trpc.knowledge.importFromUrl.useMutation({
-    onSuccess: () => { refetchArticles(); setWebsiteOpen(false); setWebsiteUrl(""); toast.success("Website content imported!"); },
+    onSuccess: () => { refetchArticles(); setWebsiteOpen(false); setWebsiteUrl(""); toast.success("Website content learned"); },
     onError: (e) => toast.error(e.message || "Failed to import from website"),
   });
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
   const resetArticleForm = () => { setArticleTitle(""); setArticleContent(""); setArticleCategory("general"); setEditingArticleId(null); };
   const resetQAForm = () => { setQaQuestion(""); setQaAnswer(""); setEditingQaId(null); };
 
@@ -93,121 +91,60 @@ export default function KnowledgeBase() {
     setArticleCategory(a.category ?? "general");
     setArticleOpen(true);
   };
-
   const handleSaveArticle = () => {
     if (!articleTitle.trim() || !articleContent.trim()) { toast.error("Title and content are required"); return; }
     if (editingArticleId) {
       updateArticle.mutate({ id: editingArticleId, title: articleTitle, content: articleContent, category: articleCategory });
     } else {
-      createArticle.mutate({ title: articleTitle, content: articleContent, category: articleCategory, agentId: createAgentId });
+      createArticle.mutate({ title: articleTitle, content: articleContent, category: articleCategory, agentId });
     }
   };
-
   const handleEditQA = (qa: { id: number; question: string; answer: string }) => {
     setEditingQaId(qa.id);
     setQaQuestion(qa.question);
     setQaAnswer(qa.answer);
     setQaOpen(true);
   };
-
   const handleSaveQA = () => {
     if (!qaQuestion.trim() || !qaAnswer.trim()) { toast.error("Question and answer are required"); return; }
     if (editingQaId) {
       updateQA.mutate({ id: editingQaId, question: qaQuestion, answer: qaAnswer });
     } else {
-      createQA.mutate({ question: qaQuestion, answer: qaAnswer, agentId: createAgentId });
+      createQA.mutate({ question: qaQuestion, answer: qaAnswer, agentId });
     }
   };
 
-  const matchesScope = (itemAgentId?: number | null) => {
-    if (agentScope === "all") return true;
-    if (agentScope === "shared") return itemAgentId == null;
-    return itemAgentId === Number(agentScope);
-  };
-
   const filteredArticles = articles?.filter((a) =>
-    matchesScope((a as { agentId?: number | null }).agentId) &&
-    (a.title.toLowerCase().includes(search.toLowerCase()) ||
-    (a.content ?? "").toLowerCase().includes(search.toLowerCase()))
+    a.title.toLowerCase().includes(search.toLowerCase()) ||
+    (a.content ?? "").toLowerCase().includes(search.toLowerCase())
+  ) ?? [];
+  const filteredQA = qaPairs?.filter((q) =>
+    q.question.toLowerCase().includes(search.toLowerCase()) ||
+    q.answer.toLowerCase().includes(search.toLowerCase())
   ) ?? [];
 
-  const filteredQA = qaPairs?.filter((q) =>
-    matchesScope((q as { agentId?: number | null }).agentId) &&
-    (q.question.toLowerCase().includes(search.toLowerCase()) ||
-    q.answer.toLowerCase().includes(search.toLowerCase()))
-  ) ?? [];
+  const isShared = (itemAgentId?: number | null) => itemAgentId == null;
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Knowledge Base</h1>
-          <p className="text-muted-foreground text-sm mt-1">Articles and Q&A pairs your AI agent uses to answer questions accurately</p>
+          <p className="text-sm font-semibold text-foreground">Knowledge for this agent</p>
+          <p className="text-xs text-muted-foreground">Articles, Q&A and website content this agent uses to answer accurately. The more you add, the smarter it gets.</p>
         </div>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-3 gap-4">
-        {[
-          { label: "Total Articles", value: articles?.length ?? 0, icon: FileText, color: "text-blue-600 bg-blue-500/10" },
-          { label: "Q&A Pairs", value: qaPairs?.length ?? 0, icon: HelpCircle, color: "text-purple-600 bg-purple-500/10" },
-          { label: "Published", value: (articles?.length ?? 0) + (qaPairs?.length ?? 0), icon: CheckCircle2, color: "text-green-600 bg-green-500/10" },
-        ].map((stat) => (
-          <Card key={stat.label} className="border-border">
-            <CardContent className="p-4 flex items-center gap-3">
-              <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center", stat.color)}>
-                <stat.icon className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-xl font-bold text-foreground">{stat.value}</p>
-                <p className="text-xs text-muted-foreground">{stat.label}</p>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Search articles and Q&A pairs..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9"
-        />
-      </div>
-
-      {/* Agent scope + website import */}
-      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="flex items-center gap-2">
-          <Users className="w-4 h-4 text-muted-foreground shrink-0" />
-          <Select value={agentScope} onValueChange={setAgentScope}>
-            <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All knowledge</SelectItem>
-              <SelectItem value="shared">Shared (all agents)</SelectItem>
-              {agents?.map((a) => (
-                <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <p className="text-xs text-muted-foreground flex-1">
-          {createAgentId
-            ? `New items are assigned to ${agentName(createAgentId)} only.`
-            : "New items are shared across all agents. Pick an agent to give it its own knowledge."}
-        </p>
         <Dialog open={websiteOpen} onOpenChange={(v) => { setWebsiteOpen(v); if (!v) setWebsiteUrl(""); }}>
           <DialogTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-2"><Globe className="w-4 h-4" />Learn from website</Button>
+            <Button variant="outline" size="sm" className="gap-2 shrink-0">
+              {canLearnFromWebsite ? <Globe className="w-4 h-4" /> : <Lock className="w-3.5 h-3.5" />}
+              Learn from website
+            </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
             <DialogHeader><DialogTitle>Learn from a website</DialogTitle></DialogHeader>
             <div className="space-y-4 pt-2">
               <p className="text-sm text-muted-foreground">
-                We'll fetch the page, extract its text, and save it as an article{createAgentId ? ` for ${agentName(createAgentId)}` : " shared across all agents"} so the AI can use it.
+                We'll fetch the page, extract its text, and save it as an article for this agent so the AI can use it.
+                {!canLearnFromWebsite && " This feature is available on the Starter plan and above."}
               </p>
               <div className="space-y-2">
                 <Label>Website URL</Label>
@@ -219,7 +156,7 @@ export default function KnowledgeBase() {
                 onClick={() => {
                   let url = websiteUrl.trim();
                   if (!/^https?:\/\//i.test(url)) url = "https://" + url;
-                  importFromUrl.mutate({ url, agentId: createAgentId });
+                  importFromUrl.mutate({ url, agentId });
                 }}
               >
                 {importFromUrl.isPending ? <><Loader2 className="w-4 h-4 animate-spin" />Importing…</> : <><Globe className="w-4 h-4" />Import content</>}
@@ -229,20 +166,17 @@ export default function KnowledgeBase() {
         </Dialog>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="articles">
-        <div className="flex items-center justify-between">
-          <TabsList>
-            <TabsTrigger value="articles" className="gap-1.5">
-              <FileText className="w-3.5 h-3.5" />
-              Articles ({articles?.length ?? 0})
-            </TabsTrigger>
-            <TabsTrigger value="qa" className="gap-1.5">
-              <HelpCircle className="w-3.5 h-3.5" />
-              Q&A Pairs ({qaPairs?.length ?? 0})
-            </TabsTrigger>
-          </TabsList>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input placeholder="Search this agent's knowledge..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+      </div>
 
+      <Tabs defaultValue="articles">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <TabsList>
+            <TabsTrigger value="articles" className="gap-1.5"><FileText className="w-3.5 h-3.5" />Articles ({articles?.length ?? 0})</TabsTrigger>
+            <TabsTrigger value="qa" className="gap-1.5"><HelpCircle className="w-3.5 h-3.5" />Q&A ({qaPairs?.length ?? 0})</TabsTrigger>
+          </TabsList>
           <div className="flex gap-2">
             <TabsContent value="articles" className="mt-0">
               <Dialog open={articleOpen} onOpenChange={(v) => { setArticleOpen(v); if (!v) resetArticleForm(); }}>
@@ -250,18 +184,14 @@ export default function KnowledgeBase() {
                   <Button size="sm" className="gap-2"><Plus className="w-4 h-4" />New Article</Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>{editingArticleId ? "Edit Article" : "New Article"}</DialogTitle>
-                  </DialogHeader>
+                  <DialogHeader><DialogTitle>{editingArticleId ? "Edit Article" : "New Article"}</DialogTitle></DialogHeader>
                   <div className="space-y-4 pt-2">
                     <div className="space-y-2">
                       <Label>Category</Label>
                       <Select value={articleCategory} onValueChange={setArticleCategory}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {CATEGORIES.map((c) => (
-                            <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>
-                          ))}
+                          {CATEGORIES.map((c) => <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </div>
@@ -271,13 +201,7 @@ export default function KnowledgeBase() {
                     </div>
                     <div className="space-y-2">
                       <Label>Content</Label>
-                      <Textarea
-                        placeholder="Write the article content here..."
-                        value={articleContent}
-                        onChange={(e) => setArticleContent(e.target.value)}
-                        rows={8}
-                        className="resize-y max-h-[45vh] overflow-y-auto"
-                      />
+                      <Textarea placeholder="Write the article content here..." value={articleContent} onChange={(e) => setArticleContent(e.target.value)} rows={8} className="resize-y max-h-[45vh] overflow-y-auto" />
                     </div>
                     <Button className="w-full" onClick={handleSaveArticle} disabled={createArticle.isPending || updateArticle.isPending}>
                       {createArticle.isPending || updateArticle.isPending ? "Saving..." : editingArticleId ? "Update Article" : "Create Article"}
@@ -286,16 +210,13 @@ export default function KnowledgeBase() {
                 </DialogContent>
               </Dialog>
             </TabsContent>
-
             <TabsContent value="qa" className="mt-0">
               <Dialog open={qaOpen} onOpenChange={(v) => { setQaOpen(v); if (!v) resetQAForm(); }}>
                 <DialogTrigger asChild>
-                  <Button size="sm" className="gap-2"><Plus className="w-4 h-4" />Add Q&A Pair</Button>
+                  <Button size="sm" className="gap-2"><Plus className="w-4 h-4" />Add Q&A</Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>{editingQaId ? "Edit Q&A Pair" : "New Q&A Pair"}</DialogTitle>
-                  </DialogHeader>
+                  <DialogHeader><DialogTitle>{editingQaId ? "Edit Q&A Pair" : "New Q&A Pair"}</DialogTitle></DialogHeader>
                   <div className="space-y-4 pt-2">
                     <div className="space-y-2">
                       <Label>Question</Label>
@@ -303,13 +224,7 @@ export default function KnowledgeBase() {
                     </div>
                     <div className="space-y-2">
                       <Label>Answer</Label>
-                      <Textarea
-                        placeholder="Write the answer here..."
-                        value={qaAnswer}
-                        onChange={(e) => setQaAnswer(e.target.value)}
-                        rows={5}
-                        className="resize-y max-h-[45vh] overflow-y-auto"
-                      />
+                      <Textarea placeholder="Write the answer here..." value={qaAnswer} onChange={(e) => setQaAnswer(e.target.value)} rows={5} className="resize-y max-h-[45vh] overflow-y-auto" />
                     </div>
                     <Button className="w-full" onClick={handleSaveQA} disabled={createQA.isPending || updateQA.isPending}>
                       {createQA.isPending || updateQA.isPending ? "Saving..." : editingQaId ? "Update Q&A" : "Add Q&A Pair"}
@@ -321,15 +236,15 @@ export default function KnowledgeBase() {
           </div>
         </div>
 
-        {/* Articles Tab */}
+        {/* Articles list */}
         <TabsContent value="articles" className="mt-4">
           {filteredArticles.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                <BookOpen className="w-8 h-8 text-primary" />
+            <div className="text-center py-12">
+              <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-3">
+                <BookOpen className="w-7 h-7 text-primary" />
               </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">No articles yet</h3>
-              <p className="text-muted-foreground text-sm mb-6">Create articles to help your AI agent answer customer questions accurately.</p>
+              <h3 className="text-base font-semibold text-foreground mb-1">No articles yet</h3>
+              <p className="text-muted-foreground text-sm mb-4">Add articles so this agent can answer accurately.</p>
               <Button onClick={() => setArticleOpen(true)} className="gap-2"><Plus className="w-4 h-4" />Create First Article</Button>
             </div>
           ) : (
@@ -346,28 +261,21 @@ export default function KnowledgeBase() {
                           <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <p className="font-medium text-foreground text-sm">{article.title}</p>
                             <Badge variant="outline" className="text-xs capitalize">{article.category ?? "general"}</Badge>
-                            <Badge variant="secondary" className="text-xs gap-1">
-                              <Bot className="w-3 h-3" />{agentName((article as { agentId?: number | null }).agentId) ?? "Shared"}
-                            </Badge>
+                            {isShared((article as { agentId?: number | null }).agentId) && (
+                              <Badge variant="secondary" className="text-xs">Shared</Badge>
+                            )}
                             {(article as { sourceUrl?: string | null }).sourceUrl && (
                               <Badge variant="outline" className="text-xs gap-1"><Globe className="w-3 h-3" />Website</Badge>
                             )}
-                            <Badge className="text-xs bg-green-500/10 text-green-600 border-green-200">Ready</Badge>
                           </div>
                           <p className="text-xs text-muted-foreground line-clamp-2">{article.content}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
-                        <Button
-                          variant="ghost" size="icon" className="w-8 h-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => handleEditArticle({ id: article.id, title: article.title, content: article.content ?? '', category: article.category })}
-                        >
+                        <Button variant="ghost" size="icon" className="w-8 h-8" onClick={() => handleEditArticle({ id: article.id, title: article.title, content: article.content ?? '', category: article.category })}>
                           <Edit2 className="w-3.5 h-3.5" />
                         </Button>
-                        <Button
-                          variant="ghost" size="icon" className="w-8 h-8 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-                          onClick={() => { if (confirm("Delete this article?")) deleteArticle.mutate({ id: article.id }); }}
-                        >
+                        <Button variant="ghost" size="icon" className="w-8 h-8 text-destructive hover:text-destructive" onClick={() => { if (confirm("Delete this article?")) deleteArticle.mutate({ id: article.id }); }}>
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </div>
@@ -379,15 +287,15 @@ export default function KnowledgeBase() {
           )}
         </TabsContent>
 
-        {/* Q&A Tab */}
+        {/* Q&A list */}
         <TabsContent value="qa" className="mt-4">
           {filteredQA.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="w-16 h-16 rounded-2xl bg-purple-500/10 flex items-center justify-center mx-auto mb-4">
-                <MessageSquare className="w-8 h-8 text-purple-600" />
+            <div className="text-center py-12">
+              <div className="w-14 h-14 rounded-2xl bg-purple-500/10 flex items-center justify-center mx-auto mb-3">
+                <MessageSquare className="w-7 h-7 text-purple-600" />
               </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">No Q&A pairs yet</h3>
-              <p className="text-muted-foreground text-sm mb-6">Add question-answer pairs to train your AI agent on common customer questions.</p>
+              <h3 className="text-base font-semibold text-foreground mb-1">No Q&A pairs yet</h3>
+              <p className="text-muted-foreground text-sm mb-4">Add question-answer pairs for common customer questions.</p>
               <Button onClick={() => setQaOpen(true)} className="gap-2"><Plus className="w-4 h-4" />Add First Q&A Pair</Button>
             </div>
           ) : (
@@ -403,24 +311,18 @@ export default function KnowledgeBase() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1 flex-wrap">
                             <p className="font-medium text-foreground text-sm">{qa.question}</p>
-                            <Badge variant="secondary" className="text-xs gap-1">
-                              <Bot className="w-3 h-3" />{agentName((qa as { agentId?: number | null }).agentId) ?? "Shared"}
-                            </Badge>
+                            {isShared((qa as { agentId?: number | null }).agentId) && (
+                              <Badge variant="secondary" className="text-xs">Shared</Badge>
+                            )}
                           </div>
                           <p className="text-xs text-muted-foreground line-clamp-2">{qa.answer}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
-                        <Button
-                          variant="ghost" size="icon" className="w-8 h-8 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => handleEditQA({ id: qa.id, question: qa.question, answer: qa.answer })}
-                        >
+                        <Button variant="ghost" size="icon" className="w-8 h-8" onClick={() => handleEditQA({ id: qa.id, question: qa.question, answer: qa.answer })}>
                           <Edit2 className="w-3.5 h-3.5" />
                         </Button>
-                        <Button
-                          variant="ghost" size="icon" className="w-8 h-8 opacity-0 group-hover:opacity-100 transition-opacity text-destructive hover:text-destructive"
-                          onClick={() => { if (confirm("Delete this Q&A pair?")) deleteQA.mutate({ id: qa.id }); }}
-                        >
+                        <Button variant="ghost" size="icon" className="w-8 h-8 text-destructive hover:text-destructive" onClick={() => { if (confirm("Delete this Q&A pair?")) deleteQA.mutate({ id: qa.id }); }}>
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
                       </div>

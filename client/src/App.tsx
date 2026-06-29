@@ -14,7 +14,6 @@ import Playground from "./pages/Playground";
 import Inbox from "./pages/Inbox";
 import Tickets from "./pages/Tickets";
 import Contacts from "./pages/Contacts";
-import KnowledgeBase from "./pages/KnowledgeBase";
 import Analytics from "./pages/Analytics";
 import EmbedCode from "./pages/EmbedCode";
 import Affiliate from "./pages/Affiliate";
@@ -237,15 +236,6 @@ function Router() {
           <OnboardingGate>
             <AppLayout>
               <Contacts />
-            </AppLayout>
-          </OnboardingGate>
-        </AuthGate>
-      )} />
-      <Route path="/knowledge" component={() => (
-        <AuthGate>
-          <OnboardingGate>
-            <AppLayout>
-              <KnowledgeBase />
             </AppLayout>
           </OnboardingGate>
         </AuthGate>
