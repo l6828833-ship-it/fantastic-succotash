@@ -1,5 +1,5 @@
 === Chatrico – AI Chat Bot & Live Chat ===
-Contributors: chatrico
+Contributors: sfar04
 Tags: ai chatbot, live chat, chatbot, ai chat, customer support
 Requires at least: 5.6
 Tested up to: 7.0
