@@ -146,7 +146,10 @@ function chatrico_handle_login() {
 	check_admin_referer( 'chatrico_login' );
 
 	$email    = isset( $_POST['chatrico_email'] ) ? sanitize_email( wp_unslash( $_POST['chatrico_email'] ) ) : '';
-	$password = isset( $_POST['chatrico_password'] ) ? (string) wp_unslash( $_POST['chatrico_password'] ) : '';
+	// Passwords must be sent to the Chatrico API verbatim; sanitizing would
+	// corrupt valid passwords (e.g. those containing "<" or spaces). It is sent
+	// over HTTPS and never stored or output, and the request is nonce-protected.
+	$password = isset( $_POST['chatrico_password'] ) ? (string) wp_unslash( $_POST['chatrico_password'] ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 
 	$res = chatrico_api_login( $email, $password );
 

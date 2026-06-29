@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1544" height="500" viewBox="0 0 1544 500">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4f46e5"/>
+      <stop offset="1" stop-color="#8b5cf6"/>
+    </linearGradient>
+  </defs>
+  <rect width="1544" height="500" fill="url(#bg)"/>
+  <circle cx="1380" cy="80" r="240" fill="#ffffff" opacity="0.06"/>
+  <circle cx="1220" cy="460" r="180" fill="#ffffff" opacity="0.06"/>
+
+  <g transform="translate(112 140)">
+    <rect width="220" height="220" rx="52" fill="#ffffff" opacity="0.14"/>
+    <g transform="translate(52 56) scale(5.2)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 8V4H8"/>
+      <rect width="16" height="12" x="4" y="8" rx="2"/>
+      <path d="M2 14h2"/>
+      <path d="M20 14h2"/>
+      <path d="M15 13v2"/>
+      <path d="M9 13v2"/>
+    </g>
+  </g>
+
+  <g fill="#ffffff" font-family="'Plus Jakarta Sans','Segoe UI',Arial,sans-serif">
+    <text x="400" y="236" font-size="104" font-weight="800">Chatrico</text>
+    <text x="404" y="320" font-size="48" font-weight="600" opacity="0.95">AI Chat Bot &amp; Live Chat</text>
+    <text x="404" y="384" font-size="32" font-weight="500" opacity="0.8">Answer customers 24/7 · capture leads · human handoff</text>
+  </g>
+</svg>
