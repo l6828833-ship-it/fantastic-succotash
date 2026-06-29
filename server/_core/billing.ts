@@ -132,12 +132,12 @@ function verifyStripeEvent(rawBody: Buffer, sigHeader: string | undefined): any 
 
 // ─── Cryptomus (crypto) ───────────────────────────────────────────────────────
 
-// Cryptomus signs requests/webhooks as md5( base64(json) + apiKey ). PHP's
-// json_encode escapes forward slashes (\/), so we must do the same for the
-// signature to match.
-function cryptomusSign(payload: unknown): string {
-  const json = JSON.stringify(payload).replace(/\//g, "\\/");
-  const base64 = Buffer.from(json).toString("base64");
+// Cryptomus verifies an outgoing request as md5( base64(rawBody) + apiKey ),
+// where rawBody is the EXACT JSON string we POST. So we must sign the very same
+// bytes we send — signing a re-serialized/slash-escaped copy (while sending a
+// different string) makes Cryptomus return "Invalid Sign".
+function cryptomusSignString(jsonString: string): string {
+  const base64 = Buffer.from(jsonString).toString("base64");
   return createHash("md5").update(base64 + ENV.cryptomusApiKey).digest("hex");
 }
 
@@ -148,6 +148,9 @@ export async function createCryptomusInvoice(opts: {
 }): Promise<{ url: string; orderId: string }> {
   const amountCents = db.planPriceCents(opts.plan);
   if (!amountCents) throw new Error("Plan is not purchasable");
+  if (!ENV.cryptomusMerchantId || !ENV.cryptomusApiKey) {
+    throw new Error("Crypto payments are not configured. Set CRYPTOMUS_MERCHANT_ID (merchant UUID) and CRYPTOMUS_API_KEY (the Payment API key) in your environment.");
+  }
 
   const orderId = `cmus_${opts.workspaceId}_${opts.plan}_${Date.now()}`;
   const body = {
@@ -159,18 +162,21 @@ export async function createCryptomusInvoice(opts: {
     url_return: `${opts.baseUrl}/dashboard?billing=cancelled`,
   };
 
+  // Serialize once and use the SAME string for both the signature and the body.
+  const jsonBody = JSON.stringify(body);
   const resp = await fetch("https://api.cryptomus.com/v1/payment", {
     method: "POST",
     headers: {
       merchant: ENV.cryptomusMerchantId,
-      sign: cryptomusSign(body),
+      sign: cryptomusSignString(jsonBody),
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(body),
+    body: jsonBody,
   });
-  const data = (await resp.json()) as { state?: number; result?: { url?: string }; message?: string };
+  const data = (await resp.json()) as { state?: number; result?: { url?: string }; message?: string; errors?: unknown };
   if (!resp.ok || data.state !== 0 || !data.result?.url) {
-    throw new Error(data.message || "Failed to create Cryptomus invoice");
+    const detail = data.message || (data.errors ? JSON.stringify(data.errors) : "") || `HTTP ${resp.status}`;
+    throw new Error(`Cryptomus: ${detail}`);
   }
 
   await db.createPayment({
@@ -195,13 +201,20 @@ function verifyCryptomusWebhook(rawBody: Buffer): any | null {
   const sign = data?.sign;
   if (!sign) return null;
   const { sign: _omit, ...rest } = data;
-  const expected = cryptomusSign(rest);
-  try {
-    if (!timingSafeEqual(Buffer.from(expected), Buffer.from(String(sign)))) return null;
-  } catch {
-    return null;
-  }
-  return data;
+  // Cryptomus (PHP) signs with json_encode, which escapes forward slashes.
+  // JS JSON.stringify does not, so accept both encodings to stay compatible.
+  const plain = JSON.stringify(rest);
+  const candidates = [plain.replace(/\//g, "\\/"), plain].map((s) =>
+    createHash("md5").update(Buffer.from(s).toString("base64") + ENV.cryptomusApiKey).digest("hex"),
+  );
+  const ok = candidates.some((expected) => {
+    try {
+      return timingSafeEqual(Buffer.from(expected), Buffer.from(String(sign)));
+    } catch {
+      return false;
+    }
+  });
+  return ok ? data : null;
 }
 
 // ─── Route registration ───────────────────────────────────────────────────────
