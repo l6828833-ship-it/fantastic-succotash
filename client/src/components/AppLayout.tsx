@@ -313,6 +313,17 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Embedded mode (e.g. inside the WordPress plugin iframe): render just the
+  // page content with no sidebar/topbar chrome. Triggered by `?embed=1`.
+  const isEmbed = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("embed") === "1";
+  if (isEmbed) {
+    return (
+      <main className="h-screen overflow-auto bg-background">
+        {children}
+      </main>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       {/* Desktop Sidebar */}
