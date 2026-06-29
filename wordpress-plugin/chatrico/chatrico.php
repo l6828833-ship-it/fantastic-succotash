@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name:       Chatrico — AI Chat Support
+ * Plugin Name:       Chatrico – AI Chat Bot & Live Chat
  * Plugin URI:        https://chatrico.com
- * Description:        Add your Chatrico AI chat widget to your WordPress site, and view Analytics, your Agent, and your Inbox right from the dashboard. Tickets and more live on chatrico.com.
+ * Description:        AI chat bot and live chat for your website. Answer customers 24/7, capture leads, hand off to a human, and track usage — set up in minutes.
  * Version:           1.0.0
  * Author:            Chatrico
  * Author URI:        https://chatrico.com
@@ -10,9 +10,9 @@
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain:       chatrico
  *
- * Chatrico is a hosted (SaaS) product. This plugin connects your WordPress site
- * to your Chatrico workspace — it does not run the AI itself. You need a free
- * account at https://chatrico.com and an Agent ID (Dashboard → Embed Code).
+ * Chatrico is a hosted (SaaS) AI chat bot + live chat product. This plugin
+ * connects your WordPress site to your Chatrico workspace — it does not run the
+ * AI itself. Create a free account at https://chatrico.com (no credit card).
  */
 
 // Block direct access.

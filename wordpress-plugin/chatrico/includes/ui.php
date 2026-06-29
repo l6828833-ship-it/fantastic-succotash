@@ -157,39 +157,77 @@ function chatrico_usage_meter( $label, $used, $limit ) {
 
 /**
  * Render the pricing cards grid (used on the Plans page and Usage board).
+ * Styles are inlined once so the design always renders, even if the admin
+ * stylesheet is cached or unavailable.
  *
  * @param string $current Current plan id (to mark the active card).
  */
 function chatrico_render_plans_grid( $current ) {
 	$current = strtolower( (string) $current );
+
+	// Print the scoped CSS only once per request.
+	static $printed_css = false;
+	if ( ! $printed_css ) {
+		$printed_css = true;
+		?>
+		<style>
+		.crico-plans{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:8px}
+		@media(max-width:1200px){.crico-plans{grid-template-columns:repeat(2,1fr)}}
+		@media(max-width:680px){.crico-plans{grid-template-columns:1fr}}
+		.crico-plan{position:relative;display:flex;flex-direction:column;background:#fff;border:1px solid #e2e4e9;border-radius:16px;padding:22px 20px 20px;transition:transform .15s ease,box-shadow .15s ease}
+		.crico-plan:hover{transform:translateY(-3px);box-shadow:0 12px 28px rgba(17,24,39,.10)}
+		.crico-plan.is-pop{border-color:#6366f1;box-shadow:0 14px 34px rgba(99,102,241,.20)}
+		.crico-plan.is-cur{border-color:#10b981}
+		.crico-pop-tag{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:linear-gradient(90deg,#6366f1,#8b5cf6);color:#fff;font-size:11px;font-weight:700;letter-spacing:.3px;padding:4px 12px;border-radius:999px;white-space:nowrap;box-shadow:0 4px 10px rgba(99,102,241,.35)}
+		.crico-cur-tag{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:#10b981;color:#fff;font-size:11px;font-weight:700;padding:4px 12px;border-radius:999px}
+		.crico-plan h3{margin:4px 0 0;font-size:17px;font-weight:700;color:#111827}
+		.crico-price{display:flex;align-items:baseline;gap:3px;margin:10px 0 4px}
+		.crico-price b{font-size:34px;font-weight:800;color:#111827;line-height:1}
+		.crico-price span{font-size:13px;color:#6b7280;font-weight:500}
+		.crico-feats{list-style:none;margin:14px 0 18px;padding:0;flex:1;display:flex;flex-direction:column;gap:9px}
+		.crico-feats li{position:relative;padding-left:25px;font-size:13px;color:#374151;line-height:1.4}
+		.crico-feats li::before{content:"";position:absolute;left:0;top:1px;width:16px;height:16px;border-radius:999px;background:#ecfdf5}
+		.crico-feats li::after{content:"✓";position:absolute;left:4px;top:0;font-size:11px;font-weight:800;color:#059669}
+		.crico-cta{display:block;text-align:center;text-decoration:none;font-weight:600;font-size:14px;padding:11px 14px;border-radius:10px;transition:opacity .15s ease}
+		.crico-cta-up{background:linear-gradient(90deg,#6366f1,#8b5cf6);color:#fff!important;box-shadow:0 6px 16px rgba(99,102,241,.30)}
+		.crico-cta-up:hover{opacity:.92}
+		.crico-cta-cur{background:#f3f4f6;color:#6b7280!important;cursor:default}
+		.crico-cta-free{background:#fff;color:#6b7280!important;border:1px solid #e2e4e9}
+		</style>
+		<?php
+	}
 	?>
-	<div class="chatrico-plans-grid">
+	<div class="crico-plans">
 		<?php foreach ( chatrico_plans() as $p ) : ?>
 			<?php
 			$is_current = ( $p['id'] === $current );
-			$classes    = 'chatrico-plan-card';
+			$classes    = 'crico-plan';
 			if ( $p['highlight'] ) {
-				$classes .= ' is-highlight';
+				$classes .= ' is-pop';
 			}
 			if ( $is_current ) {
-				$classes .= ' is-current';
+				$classes .= ' is-cur';
 			}
 			?>
 			<div class="<?php echo esc_attr( $classes ); ?>">
-				<?php if ( $p['highlight'] ) : ?><span class="chatrico-plan-tag">Most popular</span><?php endif; ?>
+				<?php if ( $is_current ) : ?>
+					<span class="crico-cur-tag">Your plan</span>
+				<?php elseif ( $p['highlight'] ) : ?>
+					<span class="crico-pop-tag">★ Most popular</span>
+				<?php endif; ?>
 				<h3><?php echo esc_html( $p['name'] ); ?></h3>
-				<div class="chatrico-plan-price"><?php echo esc_html( $p['price'] ); ?><span><?php echo esc_html( $p['period'] ); ?></span></div>
-				<ul>
+				<div class="crico-price"><b><?php echo esc_html( $p['price'] ); ?></b><span><?php echo esc_html( $p['period'] ); ?></span></div>
+				<ul class="crico-feats">
 					<?php foreach ( $p['features'] as $f ) : ?>
 						<li><?php echo esc_html( $f ); ?></li>
 					<?php endforeach; ?>
 				</ul>
 				<?php if ( $is_current ) : ?>
-					<button class="button" disabled>Current plan</button>
+					<span class="crico-cta crico-cta-cur">Current plan</span>
 				<?php elseif ( 'free' === $p['id'] ) : ?>
-					<span class="chatrico-plan-foot">Included free</span>
+					<span class="crico-cta crico-cta-free">Free forever</span>
 				<?php else : ?>
-					<a class="button button-primary" href="<?php echo esc_url( chatrico_upgrade_url( $p['id'] ) ); ?>" target="_blank" rel="noopener">Upgrade ↗</a>
+					<a class="crico-cta crico-cta-up" href="<?php echo esc_url( chatrico_upgrade_url( $p['id'] ) ); ?>" target="_blank" rel="noopener">Upgrade to <?php echo esc_html( $p['name'] ); ?> ↗</a>
 				<?php endif; ?>
 			</div>
 		<?php endforeach; ?>
