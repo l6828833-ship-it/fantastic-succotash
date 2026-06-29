@@ -8,14 +8,17 @@ Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Add your Chatrico AI chat widget to WordPress and manage Analytics, your Agent, and your Inbox without leaving the dashboard.
+Add your Chatrico AI chat widget to WordPress, then log in to manage your Agent, read your Inbox, and track usage without leaving the dashboard.
 
 == Description ==
 
 Chatrico is an AI customer-support assistant for your website. This plugin connects your WordPress site to your Chatrico workspace.
 
 * One-click chat widget — no theme editing.
-* See Analytics, edit your Agent, and read your Inbox right inside WP admin.
+* Log in with your Chatrico account, right inside WordPress.
+* See your live **Usage** (conversations, contacts, agents, tickets) against your plan.
+* Manage your **Agent** and read your **Inbox** from wp-admin.
+* Compare **Plans** and upgrade in a click.
 * Tickets, contacts and billing open in the full Chatrico dashboard.
 
 Appearance (color, position, size, theme) is managed in your Agent Settings on chatrico.com and applies automatically — you never re-copy code.
@@ -26,8 +29,8 @@ Chatrico is a hosted service. You need a free account at https://chatrico.com. A
 
 1. Upload the `chatrico` folder to `/wp-content/plugins/`, or install the ZIP via Plugins → Add New → Upload.
 2. Activate the plugin.
-3. Go to **Chatrico → Connect** and paste your **Agent ID** (found in your Chatrico dashboard under Embed Code).
-4. Save. The chat widget now appears on your site.
+3. Go to **Chatrico → Connect** and log in with your Chatrico email and password.
+4. Pick which agent shows on your site and save. The chat widget goes live instantly.
 
 == Frequently Asked Questions ==
 
@@ -43,4 +46,4 @@ In your Chatrico Agent Settings. Changes apply automatically; you don’t touch 
 == Changelog ==
 
 = 1.0.0 =
-* Initial release: widget injection + embedded Analytics, Agent and Inbox views.
+* Initial release: account login, chat-widget injection, Usage board, Agent and Inbox views, and Plans with upgrade.

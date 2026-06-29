@@ -29,6 +29,8 @@ define( 'CHATRICO_URL', plugin_dir_url( __FILE__ ) );
 define( 'CHATRICO_DEFAULT_SITE', 'https://chatrico.com' );
 
 require_once CHATRICO_PATH . 'includes/helpers.php';
+require_once CHATRICO_PATH . 'includes/api.php';
+require_once CHATRICO_PATH . 'includes/ui.php';
 require_once CHATRICO_PATH . 'includes/settings.php';
 require_once CHATRICO_PATH . 'includes/widget.php';
 require_once CHATRICO_PATH . 'includes/admin.php';
@@ -41,6 +43,8 @@ function chatrico_activate() {
 	add_option( 'chatrico_agent_id', '' );
 	add_option( 'chatrico_enable_widget', '1' );
 	add_option( 'chatrico_hide_for_admins', '0' );
+	add_option( 'chatrico_token', '' );
+	add_option( 'chatrico_account', array() );
 }
 register_activation_hook( __FILE__, 'chatrico_activate' );
 
