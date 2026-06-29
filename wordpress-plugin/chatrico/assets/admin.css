@@ -58,30 +58,6 @@
 	margin: 8px 0;
 }
 
-/* The iframe holding the embedded Chatrico page */
-.chatrico-frame-wrap {
-	margin-top: 12px;
-	border: 1px solid #dcdcde;
-	border-radius: 10px;
-	overflow: hidden;
-	background: #f6f7f7;
-}
-
-.chatrico-frame {
-	display: block;
-	width: 100%;
-	height: calc(100vh - 230px);
-	min-height: 520px;
-	border: 0;
-}
-
-@media screen and (max-width: 782px) {
-	.chatrico-frame {
-		height: calc(100vh - 260px);
-		min-height: 460px;
-	}
-}
-
 
 /* ── Upgrade banner ───────────────────────────────────────────────────────── */
 .chatrico-upgrade-banner {
@@ -198,3 +174,14 @@
 	background: #fff7ed; border: 1px solid #fed7aa; border-radius: 10px;
 	color: #9a3412;
 }
+
+
+/* Dismiss "×" on the upgrade banner */
+.chatrico-ub-actions { display: flex; align-items: center; gap: 8px; }
+.chatrico-ub-dismiss {
+	display: inline-flex; align-items: center; justify-content: center;
+	width: 26px; height: 26px; border-radius: 999px;
+	color: #fff; text-decoration: none; font-size: 18px; line-height: 1;
+	background: rgba(255,255,255,.18);
+}
+.chatrico-ub-dismiss:hover { background: rgba(255,255,255,.32); color: #fff; }

@@ -103,18 +103,26 @@ function chatrico_next_plan() {
 }
 
 /**
- * The persistent "upgrade" banner shown at the top of every plugin page
- * (hidden only on the top-tier plans).
+ * The "upgrade" banner shown at the top of plugin pages (hidden on the
+ * top-tier plans). It is dismissible per-user and reappears after 7 days.
  */
 function chatrico_upgrade_banner() {
 	$plan = chatrico_current_plan();
 	if ( in_array( $plan, array( 'business', 'enterprise' ), true ) ) {
 		return;
 	}
+
+	// Respect a recent dismissal (self-clears after 7 days).
+	$dismissed = (int) get_user_meta( get_current_user_id(), 'chatrico_banner_dismissed', true );
+	if ( $dismissed && ( time() - $dismissed ) < 7 * DAY_IN_SECONDS ) {
+		return;
+	}
+
 	$next      = chatrico_next_plan();
 	$next_name = $next ? chatrico_plan_name( $next ) : 'Pro';
 	$next      = $next ? $next : 'pro';
 	$plans_url = admin_url( 'admin.php?page=chatrico-plans' );
+	$dismiss   = wp_nonce_url( admin_url( 'admin-post.php?action=chatrico_dismiss_banner' ), 'chatrico_dismiss_banner' );
 	?>
 	<div class="chatrico-upgrade-banner">
 		<div class="chatrico-ub-text">
@@ -124,6 +132,7 @@ function chatrico_upgrade_banner() {
 		<div class="chatrico-ub-actions">
 			<a class="button button-primary" href="<?php echo esc_url( chatrico_upgrade_url( $next ) ); ?>" target="_blank" rel="noopener">Upgrade now ↗</a>
 			<a class="button" href="<?php echo esc_url( $plans_url ); ?>">Compare plans</a>
+			<a class="chatrico-ub-dismiss" href="<?php echo esc_url( $dismiss ); ?>" title="Dismiss" aria-label="Dismiss">&times;</a>
 		</div>
 	</div>
 	<?php

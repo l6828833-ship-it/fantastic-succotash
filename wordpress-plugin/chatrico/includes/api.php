@@ -176,3 +176,15 @@ function chatrico_handle_logout() {
 	wp_safe_redirect( admin_url( 'admin.php?page=chatrico' ) );
 	exit;
 }
+
+add_action( 'admin_post_chatrico_dismiss_banner', 'chatrico_dismiss_banner' );
+function chatrico_dismiss_banner() {
+	if ( ! current_user_can( 'manage_options' ) ) {
+		wp_die( 'Not allowed' );
+	}
+	check_admin_referer( 'chatrico_dismiss_banner' );
+	update_user_meta( get_current_user_id(), 'chatrico_banner_dismissed', time() );
+	$back = wp_get_referer();
+	wp_safe_redirect( $back ? $back : admin_url( 'admin.php?page=chatrico' ) );
+	exit;
+}

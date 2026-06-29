@@ -53,8 +53,8 @@ No. The widget loads asynchronously from Chatrico, so it won’t block your page
 = How do I change the widget color or position? =
 In your Chatrico Agent Settings. Changes apply automatically; you don’t edit this plugin.
 
-= The embedded Inbox panel is blank. Why? =
-Some browsers block third-party login cookies inside iframes. Use the “Open in Chatrico” button — it always works when you’re signed in to chatrico.com.
+= Where do I reply to conversations? =
+Open the Inbox from the plugin’s Inbox page (the “Open Inbox in Chatrico” button) to chat in real time and hand off between AI and your team.
 
 == Screenshots ==
 
