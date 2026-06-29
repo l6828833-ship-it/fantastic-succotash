@@ -8,7 +8,7 @@
  * Author URI:        https://chatrico.com
  * License:           GPL-2.0-or-later
  * License URI:       https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain:       chatrico
+ * Text Domain:       chatrico-ai-chat-bot-live-chat
  *
  * Chatrico is a hosted (SaaS) AI chat bot + live chat product. This plugin
  * connects your WordPress site to your Chatrico workspace — it does not run the
