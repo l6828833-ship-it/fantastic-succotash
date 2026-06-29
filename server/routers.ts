@@ -252,11 +252,16 @@ function htmlToText(html: string): string {
 }
 
 const knowledgeRouter = router({
-  listArticles: protectedProcedure.query(async ({ ctx }) => {
-    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
-    if (!workspace) return [];
-    return db.getArticlesByWorkspace(workspace.id);
-  }),
+  listArticles: protectedProcedure
+    .input(z.object({ agentId: z.number().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) return [];
+      // When an agentId is provided, return that agent's own articles plus any
+      // shared (workspace-wide) ones — exactly the set the AI uses.
+      if (input?.agentId) return db.getArticlesByAgent(workspace.id, input.agentId);
+      return db.getArticlesByWorkspace(workspace.id);
+    }),
   createArticle: protectedProcedure
     .input(z.object({
       title: z.string().min(1),
@@ -337,11 +342,14 @@ const knowledgeRouter = router({
     await db.deleteArticle(input.id);
     return { success: true };
   }),
-  listQA: protectedProcedure.query(async ({ ctx }) => {
-    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
-    if (!workspace) return [];
-    return db.getQAPairsByWorkspace(workspace.id);
-  }),
+  listQA: protectedProcedure
+    .input(z.object({ agentId: z.number().optional() }).optional())
+    .query(async ({ ctx, input }) => {
+      const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+      if (!workspace) return [];
+      if (input?.agentId) return db.getQAPairsByAgent(workspace.id, input.agentId);
+      return db.getQAPairsByWorkspace(workspace.id);
+    }),
   createQA: protectedProcedure
     .input(z.object({
       question: z.string().min(1),
@@ -488,7 +496,19 @@ const inboxRouter = router({
     .mutation(async ({ input }) => {
       const msgs = await db.getMessagesByConversation(input.conversationId);
       const agent = input.agentId ? await db.getAgentById(input.agentId) : null;
-      const systemPrompt = agent?.systemPrompt ?? "You are a helpful customer support agent. Suggest a professional reply to the latest customer message.";
+      const basePrompt = agent?.systemPrompt ?? "You are a helpful customer support agent. Suggest a professional reply to the latest customer message.";
+      // Pull the agent's knowledge so suggested replies are grounded in the
+      // same Q&A / articles / website content the AI uses elsewhere.
+      let kbBlock = "";
+      if (agent) {
+        const sQA = await db.getQAPairsByAgent(agent.workspaceId, agent.id);
+        const sArticles = await db.getArticlesByAgent(agent.workspaceId, agent.id);
+        const sQAText = sQA.slice(0, 12).map((q) => `Q: ${q.question}\nA: ${q.answer}`).join("\n\n");
+        const sArticleText = sArticles.slice(0, 6).map((a) => `# ${a.title}\n${String(a.content ?? "").slice(0, 1500)}`).join("\n\n");
+        const k = [sQAText, sArticleText].filter(Boolean).join("\n\n");
+        if (k) kbBlock = `\n\nUse this knowledge base when relevant:\n${k}`;
+      }
+      const systemPrompt = basePrompt;
       const history: Array<{ role: "user" | "assistant" | "system"; content: string }> = msgs.slice(-10).map((m) => ({
         role: (m.role === "agent" ? "assistant" : m.role === "note" ? "system" : "user") as "user" | "assistant" | "system",
         content: m.content,
@@ -496,7 +516,7 @@ const inboxRouter = router({
       const response = await invokeLLM({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system" as const, content: `${systemPrompt}\n\nSuggest a concise, helpful reply to the last customer message. Return only the reply text.` },
+          { role: "system" as const, content: `${systemPrompt}${kbBlock}\n\nSuggest a concise, helpful reply to the last customer message. Return only the reply text.` },
           ...history.map(m => ({ role: m.role, content: String(m.content) })),
         ] as LLMMessage[],
       });
@@ -1092,13 +1112,26 @@ const playgroundRouter = router({
         creative: "Use your full knowledge to provide comprehensive, creative answers.",
       };
 
+      // Load THIS agent's knowledge (its own Q&A + articles + website-learned
+      // pages, plus any shared workspace-wide entries) so the playground
+      // answers exactly like the live widget does.
+      const kbQA = await db.getQAPairsByAgent(agent.workspaceId, agent.id);
+      const kbArticles = await db.getArticlesByAgent(agent.workspaceId, agent.id);
+      const kbQAText = kbQA.slice(0, 12).map((q) => `Q: ${q.question}\nA: ${q.answer}`).join("\n\n");
+      const kbArticleText = kbArticles
+        .slice(0, 6)
+        .map((a) => `# ${a.title}\n${String(a.content ?? "").slice(0, 1500)}`)
+        .join("\n\n");
+      const kbKnowledge = [kbQAText, kbArticleText].filter(Boolean).join("\n\n");
+
       const systemPrompt = [
         agent.systemPrompt ?? `You are ${agent.name}, a helpful AI assistant.`,
         `Tone: ${agent.tone ?? "professional"}`,
         `Language: ${agent.language ?? "English"}`,
         `Response length: ${agent.maxResponseLength ?? "medium"}`,
         `Answer guidance: ${guidanceInstructions[guidance as keyof typeof guidanceInstructions]}`,
-      ].join("\n");
+        kbKnowledge ? `Use this knowledge base when relevant:\n${kbKnowledge}` : "",
+      ].filter(Boolean).join("\n");
 
       const updatedMessages = [...currentMessages, { role: "user", content: input.message }];
 
