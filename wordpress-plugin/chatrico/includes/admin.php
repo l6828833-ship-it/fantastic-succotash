@@ -156,20 +156,20 @@ function chatrico_render_inbox_page() {
 		return;
 	}
 
-	$embed_url = chatrico_app_url( '/inbox', true );
-	$open_url  = chatrico_app_url( '/inbox', false );
+	$open_url = chatrico_app_url( '/inbox', false );
+	$dash_url = chatrico_app_url( '/dashboard', false );
 
 	chatrico_upgrade_banner();
 	?>
-	<div class="chatrico-view-head">
-		<div><p class="chatrico-sub">Live conversations. Reply or take over from the AI.</p></div>
-		<a class="button button-primary" href="<?php echo esc_url( $open_url ); ?>" target="_blank" rel="noopener">Open Inbox in Chatrico ↗</a>
-	</div>
-	<div class="notice notice-info chatrico-notice chatrico-embed-hint">
-		<p>If the panel below stays blank, your browser is blocking the embedded login — use <strong>Open Inbox in Chatrico ↗</strong> (you’ll need to be signed in to chatrico.com).</p>
-	</div>
-	<div class="chatrico-frame-wrap">
-		<iframe class="chatrico-frame" src="<?php echo esc_url( $embed_url ); ?>" title="Chatrico Inbox" loading="lazy"></iframe>
+	<div class="chatrico-card">
+		<div class="chatrico-view-head">
+			<div>
+				<h2>Live chat &amp; Inbox</h2>
+				<p class="chatrico-sub">Read live conversations, reply to visitors, and take over from the AI.</p>
+			</div>
+			<a class="button button-primary button-hero" href="<?php echo esc_url( $open_url ); ?>" target="_blank" rel="noopener">Open Inbox in Chatrico ↗</a>
+		</div>
+		<p class="chatrico-sub">Your conversations live in your secure Chatrico dashboard, where you can chat in real time and hand off between AI and your team. <a href="<?php echo esc_url( $dash_url ); ?>" target="_blank" rel="noopener">Open full dashboard ↗</a></p>
 	</div>
 	<?php
 }
