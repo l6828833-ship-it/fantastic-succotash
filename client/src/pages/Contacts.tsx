@@ -203,16 +203,16 @@ export default function Contacts() {
     <div className="flex flex-col h-full overflow-hidden">
       {/* Header + stats */}
       <div className="p-4 border-b border-border space-y-4 shrink-0">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
             <h1 className="text-xl font-bold text-foreground">Contacts</h1>
             <p className="text-xs text-muted-foreground">Collect leads from your bots, segment them with filters, and export to use in any email tool</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Button size="sm" variant="outline" className="gap-1.5 h-8" onClick={exportCsv} disabled={!canExport || filtered.length === 0} title={!canExport ? "CSV export is available on Pro and above" : undefined}>
+          <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+            <Button size="sm" variant="outline" className="gap-1.5 h-8 flex-1 sm:flex-none" onClick={exportCsv} disabled={!canExport || filtered.length === 0} title={!canExport ? "CSV export is available on Pro and above" : undefined}>
               <Download className="w-3.5 h-3.5" />Export CSV
             </Button>
-            <Button size="sm" className="gap-1.5 h-8" onClick={() => { if (atLimit) { showUpgrade(`You've reached your plan's limit of ${limit} contacts. Upgrade to add more.`); } else { setShowCreate(true); } }}>
+            <Button size="sm" className="gap-1.5 h-8 flex-1 sm:flex-none" onClick={() => { if (atLimit) { showUpgrade(`You've reached your plan's limit of ${limit} contacts. Upgrade to add more.`); } else { setShowCreate(true); } }}>
               <Plus className="w-3.5 h-3.5" />Add Contact
             </Button>
           </div>

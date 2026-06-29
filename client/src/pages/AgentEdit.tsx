@@ -225,34 +225,34 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-6xl mx-auto">
+    <div className="p-4 sm:p-6 space-y-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3 min-w-0">
           <Link href="/agents">
-            <Button variant="ghost" size="icon" className="rounded-full">
+            <Button variant="ghost" size="icon" className="rounded-full shrink-0">
               <ArrowLeft className="w-4 h-4" />
             </Button>
           </Link>
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
             <Bot className="w-5 h-5 text-primary" />
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-foreground">{agent.name}</h1>
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-xl font-bold text-foreground truncate">{agent.name}</h1>
             <div className="flex items-center gap-2 mt-0.5">
               <Badge variant={isActive ? "default" : "secondary"} className="text-xs">{isActive ? "Active" : "Inactive"}</Badge>
-              <span className="text-xs text-muted-foreground capitalize">{handoffMode.replace(/_/g, " ")}</span>
+              <span className="text-xs text-muted-foreground capitalize truncate">{handoffMode.replace(/_/g, " ")}</span>
             </div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Link href={`/playground/${agentId}`}>
-            <Button variant="outline" className="gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
+          <Link href={`/playground/${agentId}`} className="flex-1 sm:flex-none">
+            <Button variant="outline" className="gap-2 w-full sm:w-auto">
               <Play className="w-4 h-4" />
               Test Agent
             </Button>
           </Link>
-          <Button onClick={handleSave} disabled={updateAgent.isPending} className="gap-2">
+          <Button onClick={handleSave} disabled={updateAgent.isPending} className="gap-2 flex-1 sm:flex-none">
             <Save className="w-4 h-4" />
             {updateAgent.isPending ? "Saving..." : "Save Changes"}
           </Button>
@@ -260,13 +260,13 @@ export default function AgentEdit({ agentId }: AgentEditProps) {
       </div>
 
       <Tabs defaultValue="behavior">
-        <TabsList className="grid grid-cols-6 w-full max-w-3xl">
-          <TabsTrigger value="behavior" className="gap-1.5 text-xs"><Brain className="w-3.5 h-3.5" />Behavior</TabsTrigger>
-          <TabsTrigger value="knowledge" className="gap-1.5 text-xs"><BookOpen className="w-3.5 h-3.5" />Knowledge</TabsTrigger>
-          <TabsTrigger value="handoff" className="gap-1.5 text-xs"><Users className="w-3.5 h-3.5" />Handoff</TabsTrigger>
-          <TabsTrigger value="style" className="gap-1.5 text-xs"><Palette className="w-3.5 h-3.5" />Style</TabsTrigger>
-          <TabsTrigger value="hours" className="gap-1.5 text-xs"><Clock className="w-3.5 h-3.5" />Hours</TabsTrigger>
-          <TabsTrigger value="settings" className="gap-1.5 text-xs"><Settings className="w-3.5 h-3.5" />Settings</TabsTrigger>
+        <TabsList className="flex h-auto w-full max-w-3xl items-center justify-start gap-1 overflow-x-auto">
+          <TabsTrigger value="behavior" className="gap-1.5 text-xs shrink-0 py-1.5"><Brain className="w-3.5 h-3.5" />Behavior</TabsTrigger>
+          <TabsTrigger value="knowledge" className="gap-1.5 text-xs shrink-0 py-1.5"><BookOpen className="w-3.5 h-3.5" />Knowledge</TabsTrigger>
+          <TabsTrigger value="handoff" className="gap-1.5 text-xs shrink-0 py-1.5"><Users className="w-3.5 h-3.5" />Handoff</TabsTrigger>
+          <TabsTrigger value="style" className="gap-1.5 text-xs shrink-0 py-1.5"><Palette className="w-3.5 h-3.5" />Style</TabsTrigger>
+          <TabsTrigger value="hours" className="gap-1.5 text-xs shrink-0 py-1.5"><Clock className="w-3.5 h-3.5" />Hours</TabsTrigger>
+          <TabsTrigger value="settings" className="gap-1.5 text-xs shrink-0 py-1.5"><Settings className="w-3.5 h-3.5" />Settings</TabsTrigger>
         </TabsList>
 
         {/* ─── BEHAVIOR TAB ─── */}
