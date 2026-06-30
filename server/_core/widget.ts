@@ -61,6 +61,23 @@ const WIDGET_JS = `(function(){
   var pollTimer = null;
   var humanNoticeShown = false;
 
+  // Session lifetime. If the visitor returns within 10 minutes we resume the
+  // same conversation; after that we start a fresh chat with the welcome message
+  // so they're not dropped back into a stale thread.
+  var lastActivityKey = "chatbotpro_last_" + agentId;
+  var SESSION_TIMEOUT_MS = 10 * 60 * 1000;
+  function touchSession(){ try { localStorage.setItem(lastActivityKey, String(Date.now())); } catch (e) {} }
+  (function(){
+    try {
+      var last = Number(localStorage.getItem(lastActivityKey)) || 0;
+      if (conversationId && last && (Date.now() - last) > SESSION_TIMEOUT_MS){
+        // Expired — forget the old conversation so the next open greets fresh.
+        conversationId = null; lastMsgId = 0;
+        try { localStorage.removeItem(storeKey); localStorage.removeItem(seenKey); } catch (e) {}
+      }
+    } catch (e) {}
+  })();
+
   var open = false;
   var loading = false;
   var greeted = false;
@@ -323,7 +340,7 @@ const WIDGET_JS = `(function(){
   function offerTicketNow(){
     if (ticketOffered || humanReplied) return;
     revealTicketButton();
-    addTicketOffer("No one's available to continue right now. Open a support ticket and we'll get back to you by email.");
+    addTicketOffer("For this one it's best to open a ticket \u2014 a support specialist will get back to you by email.");
   }
 
   // Offer a ticket after ticketDelaySeconds, unless a human replies first.
@@ -357,6 +374,7 @@ const WIDGET_JS = `(function(){
     foot.style.display = "flex"; // lead not required (or already captured) — allow chatting
     if (!greeted){
       greeted = true;
+      touchSession();
       // Returning visitor with an existing conversation → replay the thread so
       // they continue where they left off (and see the agent's messages first),
       // instead of starting from zero. New visitors get the welcome message.
@@ -508,6 +526,7 @@ const WIDGET_JS = `(function(){
   function send(){
     var text = (input.value || "").trim();
     if (!text || loading) return;
+    touchSession();
     input.value = "";
     addMsg("user", text);
     loading = true; sendBtn.disabled = true;
@@ -531,7 +550,7 @@ const WIDGET_JS = `(function(){
         if (data.humanAvailable === false){
           // No human online right now — show the offline message and offer a
           // ticket, NOT the "connecting you to our team" escalation notice.
-          if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", data.offlineMessage || "No one's available right now. Leave a ticket and we'll get back to you by email."); }
+          if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", data.offlineMessage || "For this one it's best to open a ticket \u2014 a support specialist will get back to you by email."); }
           // Give the visitor an easy in-chat button to open the ticket form.
           if (ticketMode !== "off" && !ticketOffered){ revealTicketButton(); addTicketOffer(null); }
         } else {
@@ -547,7 +566,12 @@ const WIDGET_JS = `(function(){
         // human is online, offer it right away; otherwise wait the configured
         // window so a teammate can still jump in first.
         if (ticketMode === "ai_fallback" && data.fallback){
-          if (data.humanAvailable === false){ offerTicketNow(); }
+          if (data.humanAvailable === false){
+            // The AI's reply already invited them to open a ticket — in the
+            // visitor's own language — so just reveal the button, without adding
+            // a separate (English) banner on top of it.
+            if (!ticketOffered && !humanReplied){ revealTicketButton(); addTicketOffer(null); }
+          }
           else { scheduleTicketOffer(); }
         }
       } else {
