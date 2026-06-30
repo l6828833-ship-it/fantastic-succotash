@@ -186,6 +186,9 @@ export const conversations = pgTable("conversations", {
   isEscalated: boolean("isEscalated").default(false),
   csatScore: integer("csatScore"),
   channel: varchar("channel", { length: 64 }).default("web"),
+  // When an agent last opened this conversation in the Inbox. Used for the
+  // unread badge: a conversation counts as unread when this is null.
+  lastReadAt: ts("lastReadAt"),
   createdAt: ts("createdAt").defaultNow().notNull(),
   updatedAt: ts("updatedAt").defaultNow().notNull().$onUpdate(() => new Date()),
 });

@@ -664,6 +664,32 @@ export async function countConversationsByStatus(workspaceId: number, status: st
   return Number(result[0]?.count ?? 0);
 }
 
+// Count UNREAD open conversations (never opened by an agent, lastReadAt null) —
+// this is what the Inbox badge shows, so it clears as the agent opens chats.
+export async function countUnreadConversations(workspaceId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(conversations)
+    .where(and(eq(conversations.workspaceId, workspaceId), eq(conversations.status, "open"), isNull(conversations.lastReadAt)));
+  return Number(result[0]?.count ?? 0);
+}
+
+// Mark a conversation as read (agent opened it) so it stops counting as unread.
+export async function markConversationRead(conversationId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(conversations).set({ lastReadAt: new Date() }).where(eq(conversations.id, conversationId));
+}
+
+// Flag a conversation as unread again (e.g. a new visitor message arrived).
+export async function markConversationUnread(conversationId: number): Promise<void> {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(conversations).set({ lastReadAt: null }).where(eq(conversations.id, conversationId));
+}
+
 // Count tickets in a given status (e.g. "open") for the Tickets badge.
 export async function countTicketsByStatus(workspaceId: number, status: string): Promise<number> {
   const db = await getDb();

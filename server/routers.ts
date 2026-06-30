@@ -382,11 +382,17 @@ const knowledgeRouter = router({
 
 // ─── Inbox Router ─────────────────────────────────────────────────────────────
 const inboxRouter = router({
-  // Lightweight count of open conversations for the sidebar Inbox badge.
+  // Count of UNREAD open conversations for the sidebar Inbox badge (clears as
+  // the agent opens each chat).
   openCount: protectedProcedure.query(async ({ ctx }) => {
     const workspace = await db.getWorkspaceByUserId(ctx.user.id);
     if (!workspace) return 0;
-    return db.countConversationsByStatus(workspace.id, "open");
+    return db.countUnreadConversations(workspace.id);
+  }),
+  // Mark a conversation read (agent opened it) so it stops counting as unread.
+  markRead: protectedProcedure.input(z.object({ conversationId: z.number() })).mutation(async ({ input }) => {
+    await db.markConversationRead(input.conversationId);
+    return { success: true };
   }),
   listConversations: protectedProcedure
     .input(z.object({ status: z.string().optional() }))
