@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Route, Switch, useLocation } from "wouter";
 import { useEffect } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -210,8 +210,47 @@ function Router() {
   );
 }
 
+// The public site chat widget. Loads the Chatrico widget (this workspace's
+// agent) on the marketing Home and Login pages only — never inside the
+// dashboard. The agent is referenced by its secure public token.
+const SITE_WIDGET_AGENT_ID = "116cbd55b3de9378922f4e36710c2cd2";
+const SITE_WIDGET_PATHS = ["/", "/login"];
+
+function SiteChatWidget() {
+  const [location] = useLocation();
+  const allowed = SITE_WIDGET_PATHS.includes(location);
+
+  useEffect(() => {
+    // Inject the widget loader once, the first time we're on an allowed page.
+    if (allowed && !document.getElementById("chatrico-embed")) {
+      (window as unknown as { ChatBotProConfig?: unknown }).ChatBotProConfig = {
+        agentId: SITE_WIDGET_AGENT_ID,
+        apiBase: "https://chatrico.com/api",
+      };
+      const s = document.createElement("script");
+      s.id = "chatrico-embed";
+      s.src = "https://chatrico.com/widget/embed.js";
+      s.async = true;
+      s.defer = true;
+      document.body.appendChild(s);
+    }
+
+    // The widget persists in the SPA once loaded, so hide it on any non-allowed
+    // page (e.g. the dashboard) via CSS instead of trying to tear it down.
+    const styleId = "chatrico-widget-visibility";
+    let style = document.getElementById(styleId) as HTMLStyleElement | null;
+    if (!style) {
+      style = document.createElement("style");
+      style.id = styleId;
+      document.head.appendChild(style);
+    }
+    style.textContent = allowed ? "" : ".cbp-launcher,.cbp-panel{display:none !important;}";
+  }, [allowed]);
+
+  return null;
+}
+
 function App() {
-  // Capture an affiliate referral code (?ref=CODE) into a cookie so it survives
   // the GitHub OAuth round-trip and can be attributed when the visitor signs up.
   useEffect(() => {
     try {
@@ -232,6 +271,7 @@ function App() {
         <TooltipProvider>
           <Toaster richColors position="top-right" />
           <Router />
+          <SiteChatWidget />
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>
