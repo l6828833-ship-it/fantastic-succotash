@@ -78,7 +78,7 @@ export default function Inbox() {
   // Opening a conversation marks it read, so it stops counting toward the
   // Inbox unread badge.
   const markRead = trpc.inbox.markRead.useMutation({
-    onSuccess: () => { utils.inbox.openCount.invalidate(); },
+    onSuccess: () => { utils.inbox.openCount.invalidate(); utils.inbox.listConversations.invalidate(); },
   });
   useEffect(() => {
     if (selectedConvId) markRead.mutate({ conversationId: selectedConvId });
@@ -183,6 +183,7 @@ export default function Inbox() {
           ) : (
             conversations.map((conv) => {
               const status = STATUS_CONFIG[conv.status as keyof typeof STATUS_CONFIG];
+              const isUnread = !(conv as { lastReadAt?: string | null }).lastReadAt;
               return (
                 <button
                   key={conv.id}
@@ -197,7 +198,10 @@ export default function Inbox() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
-                      <p className="text-sm font-medium text-foreground truncate">{conv.visitorName ?? "Visitor"}</p>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {isUnread && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" title="Unread" />}
+                        <p className={cn("text-sm truncate text-foreground", isUnread ? "font-bold" : "font-medium")}>{conv.visitorName ?? "Visitor"}</p>
+                      </div>
                       <span className="text-xs text-muted-foreground shrink-0 ml-2">
                         {new Date(conv.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
