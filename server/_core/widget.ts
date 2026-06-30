@@ -974,11 +974,10 @@ export function registerWidgetRoutes(app: Express) {
       // marker is stripped before the reply is shown and is what lets us offer a
       // ticket / escalate — instead of the AI pretending a human is coming.
       const handoffDirective =
-        "HANDOFF RULE: Only answer from the knowledge base and the instructions above. " +
-        "If you are not confident, the answer is not in your knowledge, or the visitor needs something only a human/team can do " +
-        "(refunds, cancellations, billing changes, disputes, complaints, account-specific actions, or any promise/guarantee), " +
-        "do NOT invent an answer and do NOT claim a human has joined or will join the chat. Instead, give a short, friendly reply " +
-        "saying you'll pass it to the team so they can follow up, then output the marker [[HANDOFF]] on the very last line by itself.";
+        "ANSWER vs HANDOFF: Answer general questions yourself — pricing, plans, features, setup, how-to and anything in the knowledge base. " +
+        "Do NOT hand those off; if a detail isn't in your knowledge, give your best general answer or ask a clarifying question. " +
+        "ONLY hand off when the visitor needs an action that requires a human or account access — processing a refund, cancelling or changing a paid subscription, billing disputes, complaints, or any promise/guarantee. " +
+        "In those cases, don't invent an answer and don't claim a human has joined or will join the chat; give a short, friendly reply saying you'll pass it to the team, then output the marker [[HANDOFF]] on the very last line by itself.";
       const systemPrompt = [
         agent.systemPrompt || `You are ${agent.name}, a helpful customer support assistant.`,
         `Tone: ${agent.tone ?? "professional"}.`,
@@ -1008,15 +1007,15 @@ export function registerWidgetRoutes(app: Express) {
         .trim();
       if (!reply) reply = agent.fallbackMessage || "Let me pass this to our team so they can help.";
 
-      // Safety net: models don't always emit the marker (especially when a
-      // custom prompt tells them to "connect you with our team"). So also treat
-      // it as a handoff when the visitor clearly needs a human/action, or when
-      // the AI's own reply is trying to hand off. This guarantees a ticket is
-      // offered instead of an empty "a human will join" promise.
+      // Safety net: models don't always emit the marker. Also treat it as a
+      // handoff when the visitor clearly needs a human to take an ACTION
+      // (refund, cancel a paid plan, dispute, complaint, or explicitly asks for
+      // a person). We deliberately do NOT match the AI's own reply text — that
+      // caused false tickets and loops — and we do NOT hand off for general
+      // info/pricing/how-to questions (the AI should answer those).
       const msgLower = String(message).toLowerCase();
-      const TOPIC_HANDOFF_RE = /\b(refund|charge ?back|charge-back|reimburse|money back|cancel|cancellation|billing|invoice|dispute|complaint|speak (to|with) (a |an )?(human|person|someone|agent|representative|team)|talk (to|with) (a |an )?(human|person|someone|agent|representative|team)|live (agent|person|chat)|real (human|person)|human (agent|support|please))\b/i;
-      const REPLY_HANDOFF_RE = /(connect(ing)? you|get you in touch|in touch with (our|the)|reach out to (our|the)|someone (on|from) (our|the) team|member of (our|the) team|our (support )?team can|pass (this|it) (on |along )?to|set this up|connect you with)/i;
-      const needsHandoff = markerHandoff || TOPIC_HANDOFF_RE.test(msgLower) || REPLY_HANDOFF_RE.test(llmContent);
+      const TOPIC_HANDOFF_RE = /\b(refund|charge ?back|charge-back|reimburse|money back|cancel( my| the)? (subscription|plan|account|order|payment)|dispute|complaint|speak (to|with) (a |an )?(human|person|someone|agent|representative)|talk (to|with) (a |an )?(human|person|someone|agent|representative)|live (agent|person)|real (human|person)|human agent)\b/i;
+      const needsHandoff = markerHandoff || TOPIC_HANDOFF_RE.test(msgLower);
       // Offer a ticket / escalate whenever a handoff is needed or nothing came back.
       const wantsHandoff = needsHandoff || !llmContent;
 
