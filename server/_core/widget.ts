@@ -12,6 +12,14 @@ function setCors(res: Response) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
+// Remembers chat POSTs we've recently started processing, keyed by
+// conversationId + message text. Browsers/proxies/extensions sometimes fire the
+// exact same chat request twice (e.g. a retry of a slow LLM call). Without a
+// guard each copy generates its OWN, different AI reply and the duplicate leaks
+// in through the poll loop, so the bot looks like it "answers twice". This lets
+// a duplicate wait for the first reply instead of generating a second one.
+const recentWidgetChats = new Map<string, number>();
+
 // Vanilla JS widget served at /widget/embed.js. Kept dependency-free and
 // namespaced (cbp-) so it never clashes with the host page. No template
 // literals / ${} are used inside so it can live safely in this TS string.
@@ -949,6 +957,51 @@ export function registerWidgetRoutes(app: Express) {
         return;
       }
 
+      // ── Duplicate-request guard ───────────────────────────────────────────
+      // Collapse duplicate/retried copies of the same chat POST so the bot never
+      // generates (and shows) two replies for one visitor message.
+      const dupeKey = conversationId + "|" + message;
+      const findExistingReply = async () => {
+        const msgs = await db.getMessagesByConversation(conversationId!);
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          const m = msgs[i];
+          if (m.role !== "user" || String(m.content ?? "").trim() !== message) continue;
+          const t = (m as { createdAt?: string | Date }).createdAt
+            ? new Date((m as { createdAt?: string | Date }).createdAt as string | Date).getTime()
+            : 0;
+          if (t && Date.now() - t > 30000) return null; // too old to be a retry
+          const rep = msgs.slice(i + 1).find((x) => x.role === "agent");
+          return rep ? { userId: m.id, rep } : null;
+        }
+        return null;
+      };
+      // (a) Identical message already answered moments ago → return that reply.
+      {
+        const existing = await findExistingReply();
+        if (existing) {
+          res.json({ reply: existing.rep.content, conversationId, mode: "ai", userMessageId: existing.userId, messageId: existing.rep.id, fallback: false, duplicate: true });
+          return;
+        }
+      }
+      // (b) A copy is still being processed → wait briefly for its reply instead
+      //     of generating a second one.
+      const seenAt = recentWidgetChats.get(dupeKey);
+      const nowTs = Date.now();
+      if (seenAt && nowTs - seenAt < 30000) {
+        for (let attempt = 0; attempt < 8; attempt++) {
+          await new Promise((r) => setTimeout(r, 900));
+          const existing = await findExistingReply();
+          if (existing) {
+            res.json({ reply: existing.rep.content, conversationId, mode: "ai", userMessageId: existing.userId, messageId: existing.rep.id, fallback: false, duplicate: true });
+            return;
+          }
+        }
+      }
+      recentWidgetChats.set(dupeKey, nowTs);
+      if (recentWidgetChats.size > 1000) {
+        for (const [k, v] of recentWidgetChats) { if (nowTs - v > 120000) recentWidgetChats.delete(k); }
+      }
+
       const userMsg = await db.createMessage({ conversationId, role: "user", content: message });
       const userMessageId = userMsg?.id ?? null;
       // A new visitor message makes this conversation unread again for the agent.
@@ -1038,11 +1091,17 @@ export function registerWidgetRoutes(app: Express) {
       // Tell the AI to flag (rather than fake) anything it can't handle. The
       // marker is stripped before the reply is shown and is what lets us offer a
       // ticket / escalate — instead of the AI pretending a human is coming.
+      // Whether a real human can actually take over right now decides the wording:
+      // promise a teammate ONLY when one is reachable; otherwise steer to a ticket.
+      const canReachHuman = agent.handoffMode !== "ai_only" && humanAvailable === true;
       const handoffDirective =
         "ANSWER vs HANDOFF: Answer general questions yourself — pricing, plans, features, setup, how-to and anything in the knowledge base. " +
         "Do NOT hand those off; if a detail isn't in your knowledge, give your best general answer or ask a clarifying question. " +
-        "ONLY hand off when the visitor needs an action that requires a human or account access — processing a refund, cancelling or changing a paid subscription, billing disputes, complaints, or any promise/guarantee. " +
-        "In those cases, don't invent an answer and don't claim a human has joined or will join the chat; give a short, friendly reply saying you'll pass it to the team, then output the marker [[HANDOFF]] on the very last line by itself.";
+        "ONLY hand off when the visitor needs an action that requires a human or account access — processing a refund or withdrawal, cancelling or changing a paid subscription, billing disputes, complaints, or any promise/guarantee. " +
+        "In those cases, don't invent an answer. " +
+        (canReachHuman
+          ? "Reply briefly, IN THE VISITOR'S OWN LANGUAGE, that you're connecting them to a teammate now, then output the marker [[HANDOFF]] on the very last line by itself."
+          : "Reply briefly, IN THE VISITOR'S OWN LANGUAGE, that you'll open a support ticket so the team can follow up by email. Do NOT claim a human is available or has joined, and do NOT say 'please wait', 'one moment', or 'hold on'. Then output the marker [[HANDOFF]] on the very last line by itself.");
       const systemPrompt = [
         agent.systemPrompt || `You are ${agent.name}, a helpful customer support assistant.`,
         `Tone: ${agent.tone ?? "professional"}.`,
@@ -1113,9 +1172,11 @@ export function registerWidgetRoutes(app: Express) {
       // ticket immediately (don't make the visitor wait for someone who can't come).
       const effectiveHumanAvailable = agent.handoffMode === "ai_only" ? false : humanAvailable;
 
-      // In AI-only mode there is no human to join, so never promise one. Replace a
-      // handoff reply with clear, ticket-oriented wording.
-      if (wantsHandoff && agent.handoffMode === "ai_only") {
+      // When no human can join and we're handing off, keep the model's reply
+      // (it's already in the visitor's language and ticket-oriented per the
+      // handoff directive). Only substitute canned wording if the model returned
+      // nothing at all, so we never fall back to English on a non-English chat.
+      if (wantsHandoff && !canReachHuman && !llmContent) {
         const ticketOn = (agent.ticketMode ?? "off") !== "off";
         reply = ticketOn
           ? "That's something our team handles directly. Tap \u201cOpen a ticket\u201d below and we'll get back to you by email as soon as we can. \uD83D\uDE0A"
