@@ -58,10 +58,35 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  // Cryptomus domain-verification meta tag. We guarantee it is present in the
+  // served HTML so payment-provider verification works even if a previously
+  // cached/stale build is sitting on disk.
+  const CRYPTOMUS_META = '<meta name="cryptomus" content="4f9acfa2" />';
+  const indexPath = path.resolve(distPath, "index.html");
 
-  // fall through to index.html if the file doesn't exist
+  // Serve assets (js/css/images) statically, but DON'T let express.static
+  // auto-serve the SPA shell — we want to control that response below so we
+  // can set no-cache headers and inject the verification meta tag.
+  app.use(express.static(distPath, { index: false }));
+
+  // Serve a fresh copy of index.html for every document navigation. The
+  // no-cache headers defeat CDN/browser caching of the SPA shell, which is the
+  // usual reason a newly added <meta> tag fails to appear on the live site.
   app.use("*", (_req, res) => {
-    res.sendFile(path.resolve(distPath, "index.html"));
+    try {
+      let html = fs.readFileSync(indexPath, "utf-8");
+      if (!html.includes('name="cryptomus"')) {
+        html = html.replace("</head>", `    ${CRYPTOMUS_META}\n  </head>`);
+      }
+      res
+        .status(200)
+        .set({
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+        })
+        .end(html);
+    } catch {
+      res.sendFile(indexPath);
+    }
   });
 }
