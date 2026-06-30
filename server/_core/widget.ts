@@ -12,6 +12,14 @@ function setCors(res: Response) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
+// Remembers chat POSTs we've recently started processing, keyed by
+// conversationId + message text. Browsers/proxies/extensions sometimes fire the
+// exact same chat request twice (e.g. a retry of a slow LLM call). Without a
+// guard each copy generates its OWN, different AI reply and the duplicate leaks
+// in through the poll loop, so the bot looks like it "answers twice". This lets
+// a duplicate wait for the first reply instead of generating a second one.
+const recentWidgetChats = new Map<string, number>();
+
 // Vanilla JS widget served at /widget/embed.js. Kept dependency-free and
 // namespaced (cbp-) so it never clashes with the host page. No template
 // literals / ${} are used inside so it can live safely in this TS string.
@@ -947,6 +955,51 @@ export function registerWidgetRoutes(app: Express) {
       if (!conversationId) {
         res.status(500).json({ error: "Could not start conversation" });
         return;
+      }
+
+      // ── Duplicate-request guard ───────────────────────────────────────────
+      // Collapse duplicate/retried copies of the same chat POST so the bot never
+      // generates (and shows) two replies for one visitor message.
+      const dupeKey = conversationId + "|" + message;
+      const findExistingReply = async () => {
+        const msgs = await db.getMessagesByConversation(conversationId!);
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          const m = msgs[i];
+          if (m.role !== "user" || String(m.content ?? "").trim() !== message) continue;
+          const t = (m as { createdAt?: string | Date }).createdAt
+            ? new Date((m as { createdAt?: string | Date }).createdAt as string | Date).getTime()
+            : 0;
+          if (t && Date.now() - t > 30000) return null; // too old to be a retry
+          const rep = msgs.slice(i + 1).find((x) => x.role === "agent");
+          return rep ? { userId: m.id, rep } : null;
+        }
+        return null;
+      };
+      // (a) Identical message already answered moments ago → return that reply.
+      {
+        const existing = await findExistingReply();
+        if (existing) {
+          res.json({ reply: existing.rep.content, conversationId, mode: "ai", userMessageId: existing.userId, messageId: existing.rep.id, fallback: false, duplicate: true });
+          return;
+        }
+      }
+      // (b) A copy is still being processed → wait briefly for its reply instead
+      //     of generating a second one.
+      const seenAt = recentWidgetChats.get(dupeKey);
+      const nowTs = Date.now();
+      if (seenAt && nowTs - seenAt < 30000) {
+        for (let attempt = 0; attempt < 8; attempt++) {
+          await new Promise((r) => setTimeout(r, 900));
+          const existing = await findExistingReply();
+          if (existing) {
+            res.json({ reply: existing.rep.content, conversationId, mode: "ai", userMessageId: existing.userId, messageId: existing.rep.id, fallback: false, duplicate: true });
+            return;
+          }
+        }
+      }
+      recentWidgetChats.set(dupeKey, nowTs);
+      if (recentWidgetChats.size > 1000) {
+        for (const [k, v] of recentWidgetChats) { if (nowTs - v > 120000) recentWidgetChats.delete(k); }
       }
 
       const userMsg = await db.createMessage({ conversationId, role: "user", content: message });
