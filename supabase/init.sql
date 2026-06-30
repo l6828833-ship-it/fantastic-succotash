@@ -264,6 +264,11 @@ ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "passwordHash" text;
 ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "ticketMode" text DEFAULT 'off';
 ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "ticketDelaySeconds" integer DEFAULT 0;
 ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "humanAvailability" text DEFAULT 'auto';
+-- Public, unguessable widget identifier. Backfill existing agents with a random
+-- 32-char token, then enforce uniqueness. New agents get a token from the app.
+ALTER TABLE "agents" ADD COLUMN IF NOT EXISTS "publicId" varchar(32);
+UPDATE "agents" SET "publicId" = md5(random()::text || clock_timestamp()::text || "id"::text) WHERE "publicId" IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS "agents_publicId_key" ON "agents" ("publicId");
 -- Widget appearance + customization columns. These were added to the agents
 -- CREATE TABLE block after the table already existed on deployed databases, so
 -- without these ALTER statements the live "agents" table is missing them. That
