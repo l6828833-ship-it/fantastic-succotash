@@ -696,6 +696,21 @@ export function registerWidgetRoutes(app: Express) {
           visitorName: name || null,
           visitorEmail: email || null,
         });
+        // New lead/conversation — notify the team for the Inbox/bell badge.
+        try {
+          const owner = await db.getWorkspaceById(agent.workspaceId);
+          if (owner && conv?.id) {
+            await db.createNotification({
+              workspaceId: agent.workspaceId,
+              userId: owner.userId,
+              type: "new_conversation",
+              title: "New conversation",
+              body: `New chat from ${name || email || "a visitor"}`,
+              relatedId: conv.id,
+              relatedType: "conversation",
+            });
+          }
+        } catch (e) { console.error("[Widget] new lead notify failed", e); }
       } else {
         await db.updateConversation(conv.id, {
           visitorName: name || conv.visitorName,
@@ -878,6 +893,22 @@ export function registerWidgetRoutes(app: Express) {
           visitorId: `widget_${Date.now()}`,
         });
         conversationId = conv?.id ?? null;
+        // New visitor conversation — notify the team so the Inbox/bell show a
+        // red unread badge.
+        try {
+          const owner = await db.getWorkspaceById(agent.workspaceId);
+          if (owner && conversationId) {
+            await db.createNotification({
+              workspaceId: agent.workspaceId,
+              userId: owner.userId,
+              type: "new_conversation",
+              title: "New conversation",
+              body: String(message).slice(0, 140),
+              relatedId: conversationId,
+              relatedType: "conversation",
+            });
+          }
+        } catch (e) { console.error("[Widget] new conversation notify failed", e); }
       } else {
         conversationId = conv.id;
       }
