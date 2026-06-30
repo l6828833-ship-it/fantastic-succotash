@@ -970,12 +970,23 @@ export function registerWidgetRoutes(app: Express) {
         .map((a) => `# ${a.title}\n${String(a.content ?? "").slice(0, 1500)}`)
         .join("\n\n");
       const knowledge = [qaKnowledge, articleKnowledge].filter(Boolean).join("\n\n");
+      // Tell the AI to flag (rather than fake) anything it can't handle. The
+      // marker is stripped before the reply is shown and is what lets us offer a
+      // ticket / escalate — instead of the AI pretending a human is coming.
+      const handoffDirective =
+        "HANDOFF RULE: Only answer from the knowledge base and the instructions above. " +
+        "If you are not confident, the answer is not in your knowledge, or the visitor needs something only a human/team can do " +
+        "(refunds, cancellations, billing changes, disputes, complaints, account-specific actions, or any promise/guarantee), " +
+        "do NOT invent an answer and do NOT claim a human has joined or will join the chat. Instead, give a short, friendly reply " +
+        "saying you'll pass it to the team so they can follow up, then output the marker [[HANDOFF]] on the very last line by itself.";
       const systemPrompt = [
         agent.systemPrompt || `You are ${agent.name}, a helpful customer support assistant.`,
         `Tone: ${agent.tone ?? "professional"}.`,
         `Always respond in ${agent.language ?? "English"}.`,
+        "A welcome message has already been shown to the visitor — don't open with another greeting, just help.",
         knowledge ? `Use this knowledge base when relevant:\n${knowledge}` : "",
-        agent.fallbackMessage ? `If you cannot help, reply with: "${agent.fallbackMessage}"` : "",
+        handoffDirective,
+        agent.fallbackMessage ? `Your fallback message is: "${agent.fallbackMessage}"` : "",
       ].filter(Boolean).join("\n");
 
       const llmMessages: LLMMessage[] = [
@@ -988,13 +999,51 @@ export function registerWidgetRoutes(app: Express) {
 
       const response = await invokeLLM({ model: "gpt-4o-mini", messages: llmMessages });
       const llmContent = response.choices?.[0]?.message?.content ? String(response.choices[0].message.content) : "";
-      const reply = llmContent || (agent.fallbackMessage ?? "I'm sorry, I couldn't process that right now.");
+
+      // Did the AI signal it can't handle this on its own?
+      const HANDOFF_RE = /\[\[\s*handoff\s*\]\]/gi;
+      const needsHandoff = HANDOFF_RE.test(llmContent);
+      let reply = (llmContent || agent.fallbackMessage || "I'm sorry, I couldn't process that right now.")
+        .replace(HANDOFF_RE, "")
+        .trim();
+      if (!reply) reply = agent.fallbackMessage || "Let me pass this to our team so they can help.";
+      // Offer a ticket / escalate whenever the AI flagged a handoff or returned nothing.
+      const wantsHandoff = needsHandoff || !llmContent;
+
+      // In "AI first → human escalation" mode, a flagged handoff should actually
+      // route to a human when the team is online (notify + mark escalated).
+      if (
+        wantsHandoff &&
+        agent.handoffMode === "ai_first_human_escalation" &&
+        humanAvailable &&
+        conv &&
+        !conv.isEscalated
+      ) {
+        try {
+          await db.updateConversation(conversationId, { isEscalated: true });
+          if (ws) {
+            await db.createNotification({
+              workspaceId: agent.workspaceId,
+              userId: ws.userId,
+              type: "escalation",
+              title: "Conversation needs a human",
+              body: String(message).slice(0, 140),
+              relatedId: conversationId,
+              relatedType: "conversation",
+            });
+          }
+        } catch (e) { console.error("[Widget] handoff escalation failed", e); }
+      }
+
+      // AI-only agents never route to a live human, so the widget should offer a
+      // ticket immediately (don't make the visitor wait for someone who can't come).
+      const effectiveHumanAvailable = agent.handoffMode === "ai_only" ? false : humanAvailable;
 
       const agentMsg = await db.createMessage({ conversationId, role: "agent", content: reply });
 
-      // `fallback` lets the widget offer a ticket in ai_fallback mode when the AI
-      // couldn't answer from its knowledge.
-      res.json({ reply, conversationId, mode: "ai", userMessageId, messageId: agentMsg?.id ?? null, fallback: !llmContent, humanAvailable });
+      // `fallback` is true when the AI couldn't resolve it on its own; the widget
+      // uses it (with the ticket settings) to offer a support ticket.
+      res.json({ reply, conversationId, mode: "ai", userMessageId, messageId: agentMsg?.id ?? null, fallback: wantsHandoff, humanAvailable: effectiveHumanAvailable });
     } catch (error) {
       console.error("[Widget] chat failed", error);
       // Degrade gracefully so the visitor still sees a reply.
