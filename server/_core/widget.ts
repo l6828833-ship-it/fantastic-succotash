@@ -347,8 +347,34 @@ const WIDGET_JS = `(function(){
     if (!open || !configLoaded) return;
     if (leadRequired && !leadDone){ showLeadForm(); return; }
     foot.style.display = "flex"; // lead not required (or already captured) — allow chatting
-    if (!greeted){ greeted = true; addMsg("bot", welcome); input.focus(); }
+    if (!greeted){
+      greeted = true;
+      // Returning visitor with an existing conversation → replay the thread so
+      // they continue where they left off (and see the agent's messages first),
+      // instead of starting from zero. New visitors get the welcome message.
+      if (conversationId){ loadHistory(); }
+      else { addMsg("bot", welcome); }
+      input.focus();
+    }
     ensurePolling();
+  }
+
+  // Fetch and render the full conversation thread for a returning visitor.
+  function loadHistory(){
+    fetch(apiBase + "/widget/messages?agentId=" + encodeURIComponent(agentId) + "&conversationId=" + encodeURIComponent(conversationId) + "&history=1")
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d && d.messages && d.messages.length){
+          for (var i = 0; i < d.messages.length; i++){
+            var m = d.messages[i];
+            addMsg(m.role === "user" ? "user" : "bot", m.content || "");
+            bumpSeen(m.id);
+          }
+        } else {
+          addMsg("bot", welcome);
+        }
+      })
+      .catch(function(){ addMsg("bot", welcome); });
   }
 
   function showLeadForm(){
@@ -822,6 +848,10 @@ export function registerWidgetRoutes(app: Express) {
     try {
       const conversationId = Number(req.query.conversationId);
       const after = Number(req.query.after) || 0;
+      // history=1 returns the full thread (visitor + agent + system) so the
+      // widget can replay a returning visitor's conversation. The normal poll
+      // returns only new agent/system messages after `after`.
+      const history = req.query.history === "1" || req.query.history === "true";
       if (!req.query.agentId || !conversationId) {
         res.status(400).json({ messages: [] });
         return;
@@ -834,7 +864,9 @@ export function registerWidgetRoutes(app: Express) {
       }
       const all = await db.getMessagesByConversation(conversationId);
       const messages = all
-        .filter((m) => Number(m.id) > after && (m.role === "agent" || m.role === "system") && m.isInternal !== true)
+        .filter((m) => m.isInternal !== true && (history
+          ? true
+          : (Number(m.id) > after && (m.role === "agent" || m.role === "system"))))
         .map((m) => ({ id: m.id, role: m.role, content: m.content, createdAt: m.createdAt }));
       res.json({ messages });
     } catch (error) {
@@ -919,6 +951,8 @@ export function registerWidgetRoutes(app: Express) {
 
       const userMsg = await db.createMessage({ conversationId, role: "user", content: message });
       const userMessageId = userMsg?.id ?? null;
+      // A new visitor message makes this conversation unread again for the agent.
+      db.markConversationUnread(conversationId).catch(() => {});
 
       // Is a human available to take over? Per-agent availability wins; "auto"
       // follows the workspace Inbox online/offline toggle. When unavailable, the

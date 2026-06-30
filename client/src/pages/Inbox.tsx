@@ -75,6 +75,16 @@ export default function Inbox() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Opening a conversation marks it read, so it stops counting toward the
+  // Inbox unread badge.
+  const markRead = trpc.inbox.markRead.useMutation({
+    onSuccess: () => { utils.inbox.openCount.invalidate(); },
+  });
+  useEffect(() => {
+    if (selectedConvId) markRead.mutate({ conversationId: selectedConvId });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConvId]);
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;

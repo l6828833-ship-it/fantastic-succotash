@@ -449,3 +449,8 @@ CREATE INDEX IF NOT EXISTS "playground_sessions_agent_user_idx" ON "playground_s
 CREATE INDEX IF NOT EXISTS "team_members_workspace_idx" ON "team_members" ("workspaceId");
 CREATE INDEX IF NOT EXISTS "workspaces_user_idx" ON "workspaces" ("userId");
 CREATE INDEX IF NOT EXISTS "auth_otps_email_idx" ON "auth_otps" ("email");
+
+
+-- Inbox read-tracking: when an agent last opened a conversation. Unread badge
+-- counts conversations where this is null.
+ALTER TABLE "conversations" ADD COLUMN IF NOT EXISTS "lastReadAt" timestamptz;
