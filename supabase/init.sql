@@ -414,3 +414,38 @@ CREATE TABLE IF NOT EXISTS "support_messages" (
   "createdAt" timestamptz NOT NULL DEFAULT now(),
   "updatedAt" timestamptz NOT NULL DEFAULT now()
 );
+
+
+-- ── Performance indexes ──────────────────────────────────────────────────────
+-- Every list/count query filters by workspaceId (and messages by
+-- conversationId). Without these, Postgres scans the whole table, which gets
+-- slow as data grows. CREATE INDEX IF NOT EXISTS is idempotent and safe to
+-- re-run; failures (e.g. table not present yet) are tolerated by the runner.
+CREATE INDEX IF NOT EXISTS "conversations_workspace_idx" ON "conversations" ("workspaceId");
+CREATE INDEX IF NOT EXISTS "conversations_workspace_status_idx" ON "conversations" ("workspaceId", "status");
+CREATE INDEX IF NOT EXISTS "conversations_workspace_created_idx" ON "conversations" ("workspaceId", "createdAt");
+CREATE INDEX IF NOT EXISTS "conversations_workspace_escalated_idx" ON "conversations" ("workspaceId", "isEscalated");
+CREATE INDEX IF NOT EXISTS "messages_conversation_idx" ON "messages" ("conversationId");
+CREATE INDEX IF NOT EXISTS "messages_conversation_id_idx" ON "messages" ("conversationId", "id");
+CREATE INDEX IF NOT EXISTS "tickets_workspace_idx" ON "tickets" ("workspaceId");
+CREATE INDEX IF NOT EXISTS "tickets_workspace_created_idx" ON "tickets" ("workspaceId", "createdAt");
+CREATE INDEX IF NOT EXISTS "tickets_conversation_idx" ON "tickets" ("conversationId");
+CREATE INDEX IF NOT EXISTS "tickets_contact_idx" ON "tickets" ("contactId");
+CREATE INDEX IF NOT EXISTS "ticketNotes_ticket_idx" ON "ticketNotes" ("ticketId");
+CREATE INDEX IF NOT EXISTS "contacts_workspace_idx" ON "contacts" ("workspaceId");
+CREATE INDEX IF NOT EXISTS "contacts_workspace_email_idx" ON "contacts" ("workspaceId", "email");
+CREATE INDEX IF NOT EXISTS "agents_workspace_idx" ON "agents" ("workspaceId");
+CREATE INDEX IF NOT EXISTS "knowledge_articles_workspace_idx" ON "knowledge_articles" ("workspaceId");
+CREATE INDEX IF NOT EXISTS "knowledge_articles_agent_idx" ON "knowledge_articles" ("agentId");
+CREATE INDEX IF NOT EXISTS "qa_pairs_workspace_idx" ON "qa_pairs" ("workspaceId");
+CREATE INDEX IF NOT EXISTS "qa_pairs_agent_idx" ON "qa_pairs" ("agentId");
+CREATE INDEX IF NOT EXISTS "notifications_user_read_idx" ON "notifications" ("userId", "isRead");
+CREATE INDEX IF NOT EXISTS "notifications_workspace_idx" ON "notifications" ("workspaceId");
+CREATE INDEX IF NOT EXISTS "canned_responses_workspace_idx" ON "canned_responses" ("workspaceId");
+CREATE INDEX IF NOT EXISTS "campaigns_workspace_idx" ON "campaigns" ("workspaceId");
+CREATE INDEX IF NOT EXISTS "analytics_events_workspace_idx" ON "analytics_events" ("workspaceId");
+CREATE INDEX IF NOT EXISTS "analytics_events_workspace_created_idx" ON "analytics_events" ("workspaceId", "createdAt");
+CREATE INDEX IF NOT EXISTS "playground_sessions_agent_user_idx" ON "playground_sessions" ("agentId", "userId");
+CREATE INDEX IF NOT EXISTS "team_members_workspace_idx" ON "team_members" ("workspaceId");
+CREATE INDEX IF NOT EXISTS "workspaces_user_idx" ON "workspaces" ("userId");
+CREATE INDEX IF NOT EXISTS "auth_otps_email_idx" ON "auth_otps" ("email");
