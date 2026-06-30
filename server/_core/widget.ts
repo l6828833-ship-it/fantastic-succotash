@@ -327,6 +327,13 @@ const WIDGET_JS = `(function(){
   // shown as a short bot line above the button.
   function addTicketOffer(text){
     if (text){ addMsg("bot", text); }
+    // Keep only one inline ticket button at a time — remove any earlier one so
+    // repeated handoffs don't stack several buttons; the newest sits under the
+    // most recent message.
+    try {
+      var old = body.querySelectorAll(".cbp-offer-btn");
+      for (var k = 0; k < old.length; k++){ if (old[k].parentNode){ old[k].parentNode.removeChild(old[k]); } }
+    } catch (e) {}
     var b = document.createElement("button");
     b.className = "cbp-offer-btn";
     b.style.background = color;
