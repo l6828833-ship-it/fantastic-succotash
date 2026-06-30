@@ -183,9 +183,12 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { data: notifications } = trpc.notifications.list.useQuery(undefined, { refetchInterval: 15000, refetchOnWindowFocus: true });
   const unread = notifications?.filter((n) => !n.isRead) ?? [];
   const countByTypes = (types: string[]) => unread.filter((n) => types.includes(n.type ?? "")).length;
-  // Per-section unread counts for the nav badges.
-  const inboxCount = countByTypes(["escalation", "new_conversation", "new_message"]);
-  const ticketsCount = countByTypes(["new_ticket", "ticket_reply"]);
+  // Inbox / Tickets badges count actual open items (reliable + immediate);
+  // Help & Support uses unread admin replies.
+  const { data: inboxOpen } = trpc.inbox.openCount.useQuery(undefined, { refetchInterval: 15000, refetchOnWindowFocus: true });
+  const { data: ticketsOpen } = trpc.tickets.openCount.useQuery(undefined, { refetchInterval: 15000, refetchOnWindowFocus: true });
+  const inboxCount = inboxOpen ?? 0;
+  const ticketsCount = ticketsOpen ?? 0;
   const supportCount = countByTypes(["support_reply"]);
   const utils = trpc.useUtils();
   const { data: workspace } = trpc.workspace.get.useQuery();
