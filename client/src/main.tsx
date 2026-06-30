@@ -12,10 +12,13 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       // Serve cached data instantly on navigation (no "0 then number" flash),
-      // keep it around for 5 min, and don't refetch on every window focus.
-      staleTime: 30_000,
-      gcTime: 5 * 60_000,
+      // keep it around longer, and don't refetch on every window focus. Keeping
+      // the previous data while refetching avoids loading spinners when changing
+      // filters or revisiting a page, so data appears immediately.
+      staleTime: 60_000,
+      gcTime: 30 * 60_000,
       refetchOnWindowFocus: false,
+      placeholderData: (previousData: unknown) => previousData,
       retry: 1,
     },
   },

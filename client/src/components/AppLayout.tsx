@@ -87,7 +87,7 @@ function NavItem({ href, icon: Icon, label, badge }: { href: string; icon: React
 
 function NotificationBell() {
   const utils = trpc.useUtils();
-  const { data: notifications, refetch } = trpc.notifications.list.useQuery();
+  const { data: notifications, refetch } = trpc.notifications.list.useQuery(undefined, { refetchInterval: 15000, refetchOnWindowFocus: true });
   const markRead = trpc.notifications.markRead.useMutation({ onSuccess: () => refetch() });
   const markAllRead = trpc.notifications.markAllRead.useMutation({ onSuccess: () => refetch() });
   const unreadCount = notifications?.filter((n) => !n.isRead).length ?? 0;
@@ -178,7 +178,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { user, logout } = useAuth();
   const { theme, toggleTheme = () => {} } = useTheme();
   const [currentPath] = useLocation();
-  const { data: notifications } = trpc.notifications.list.useQuery();
+  const { data: notifications } = trpc.notifications.list.useQuery(undefined, { refetchInterval: 15000, refetchOnWindowFocus: true });
   const unreadCount = notifications?.filter((n) => !n.isRead).length ?? 0;
   const utils = trpc.useUtils();
   const { data: workspace } = trpc.workspace.get.useQuery();
@@ -223,7 +223,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       </div>
 
       {/* Navigation */}
-      <ScrollArea className="flex-1 py-4 px-3">
+      <ScrollArea className="flex-1 min-h-0 py-4 px-3">
         <div className="space-y-1">
           {navItems.map((item) => (
             <NavItem

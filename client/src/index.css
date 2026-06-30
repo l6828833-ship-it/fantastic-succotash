@@ -117,6 +117,14 @@
   }
 }
 
+/* Ensure the app always fills the viewport so full-height (h-full) layouts like
+   the Inbox don't leave white space at the bottom. */
+html,
+body,
+#root {
+  height: 100%;
+}
+
 /* Animations */
 @keyframes slide-in-from-left {
   from { transform: translateX(-100%); opacity: 0; }
