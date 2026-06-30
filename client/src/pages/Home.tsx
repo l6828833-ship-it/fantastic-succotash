@@ -253,10 +253,10 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-16 pb-20 grid lg:grid-cols-2 gap-12 items-center">
           <div>
             <Badge variant="outline" className="gap-1.5 mb-5 border-primary/30 text-primary bg-primary/5">
-              <Sparkles className="w-3.5 h-3.5" /> Meet {BRAND} — AI support on autopilot
+              <Sparkles className="w-3.5 h-3.5" /> Meet {BRAND} — no-code AI support software
             </Badge>
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.05]">
-              Turn every visitor into a <span className="text-primary">conversation</span>
+              No-code AI chat software that turns every visitor into a <span className="text-primary">conversation</span>
             </h1>
             <p className="mt-5 text-lg text-muted-foreground max-w-xl">
               {BRAND} is the AI chat assistant for your website. It answers questions instantly, captures leads,
