@@ -1560,6 +1560,23 @@ const adminRouter = router({
         }
       }
       await db.createAdminLog({ actorUserId: ctx.user.id, actorEmail: ctx.user.email ?? null, action: "support_reply", targetType: "support", targetId: String(input.id), detail: input.status ?? null });
+      // Notify the user in-app that support replied (drives the Help & Support badge).
+      if (input.reply) {
+        try {
+          const wsId = m.workspaceId ?? (await db.getWorkspaceByUserId(m.userId))?.id;
+          if (wsId) {
+            await db.createNotification({
+              workspaceId: wsId,
+              userId: m.userId,
+              type: "support_reply",
+              title: "Support replied to your message",
+              body: m.subject,
+              relatedId: m.id,
+              relatedType: "support",
+            });
+          }
+        } catch (e) { console.error("[Support] user notify failed", e); }
+      }
       return { success: true };
     }),
 
@@ -1645,6 +1662,28 @@ const supportRouter = router({
           });
         }
       } catch { /* ignore */ }
+      // Email the platform admin(s) so the support request reaches them directly.
+      try {
+        if (isEmailConfigured()) {
+          const admins = (await db.getAllUsers()).filter((u) => u.role === "admin" && u.email);
+          const who = ctx.user.email || ctx.user.name || `User #${ctx.user.id}`;
+          const safeMsg = escapeHtml(input.message.trim()).replace(/\n/g, "<br>");
+          for (const admin of admins) {
+            await sendEmail({
+              to: admin.email as string,
+              subject: `New support message: ${input.subject.trim()}`,
+              html: brandedEmail({
+                title: "New support message",
+                bodyHtml:
+                  `<p><strong>From:</strong> ${escapeHtml(who)}</p>` +
+                  `<p><strong>Subject:</strong> ${escapeHtml(input.subject.trim())}</p>` +
+                  `<p>${safeMsg}</p>`,
+              }),
+              text: `New support message from ${who}\nSubject: ${input.subject.trim()}\n\n${input.message.trim()}`,
+            }).catch((e) => console.error("[Support] admin email failed", e));
+          }
+        }
+      } catch (e) { console.error("[Support] admin notify failed", e); }
       return msg;
     }),
 });
