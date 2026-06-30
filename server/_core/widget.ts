@@ -1038,11 +1038,17 @@ export function registerWidgetRoutes(app: Express) {
       // Tell the AI to flag (rather than fake) anything it can't handle. The
       // marker is stripped before the reply is shown and is what lets us offer a
       // ticket / escalate — instead of the AI pretending a human is coming.
+      // Whether a real human can actually take over right now decides the wording:
+      // promise a teammate ONLY when one is reachable; otherwise steer to a ticket.
+      const canReachHuman = agent.handoffMode !== "ai_only" && humanAvailable === true;
       const handoffDirective =
         "ANSWER vs HANDOFF: Answer general questions yourself — pricing, plans, features, setup, how-to and anything in the knowledge base. " +
         "Do NOT hand those off; if a detail isn't in your knowledge, give your best general answer or ask a clarifying question. " +
-        "ONLY hand off when the visitor needs an action that requires a human or account access — processing a refund, cancelling or changing a paid subscription, billing disputes, complaints, or any promise/guarantee. " +
-        "In those cases, don't invent an answer and don't claim a human has joined or will join the chat; give a short, friendly reply saying you'll pass it to the team, then output the marker [[HANDOFF]] on the very last line by itself.";
+        "ONLY hand off when the visitor needs an action that requires a human or account access — processing a refund or withdrawal, cancelling or changing a paid subscription, billing disputes, complaints, or any promise/guarantee. " +
+        "In those cases, don't invent an answer. " +
+        (canReachHuman
+          ? "Reply briefly, IN THE VISITOR'S OWN LANGUAGE, that you're connecting them to a teammate now, then output the marker [[HANDOFF]] on the very last line by itself."
+          : "Reply briefly, IN THE VISITOR'S OWN LANGUAGE, that you'll open a support ticket so the team can follow up by email. Do NOT claim a human is available or has joined, and do NOT say 'please wait', 'one moment', or 'hold on'. Then output the marker [[HANDOFF]] on the very last line by itself.");
       const systemPrompt = [
         agent.systemPrompt || `You are ${agent.name}, a helpful customer support assistant.`,
         `Tone: ${agent.tone ?? "professional"}.`,
@@ -1113,9 +1119,11 @@ export function registerWidgetRoutes(app: Express) {
       // ticket immediately (don't make the visitor wait for someone who can't come).
       const effectiveHumanAvailable = agent.handoffMode === "ai_only" ? false : humanAvailable;
 
-      // In AI-only mode there is no human to join, so never promise one. Replace a
-      // handoff reply with clear, ticket-oriented wording.
-      if (wantsHandoff && agent.handoffMode === "ai_only") {
+      // When no human can join and we're handing off, keep the model's reply
+      // (it's already in the visitor's language and ticket-oriented per the
+      // handoff directive). Only substitute canned wording if the model returned
+      // nothing at all, so we never fall back to English on a non-English chat.
+      if (wantsHandoff && !canReachHuman && !llmContent) {
         const ticketOn = (agent.ticketMode ?? "off") !== "off";
         reply = ticketOn
           ? "That's something our team handles directly. Tap \u201cOpen a ticket\u201d below and we'll get back to you by email as soon as we can. \uD83D\uDE0A"
