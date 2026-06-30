@@ -77,7 +77,7 @@ function NavItem({ href, icon: Icon, label, badge }: { href: string; icon: React
         <span className="flex-1">{label}</span>
         {badge != null && badge > 0 && (
           <Badge variant="destructive" className="text-xs px-1.5 py-0 h-5 min-w-5 flex items-center justify-center">
-            {badge > 99 ? "99+" : badge}
+            {badge > 9 ? "9+" : badge}
           </Badge>
         )}
       </div>
@@ -110,7 +110,9 @@ function NotificationBell() {
         >
           <Bell className="w-4 h-4" />
           {unreadCount > 0 && (
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">
+              {unreadCount > 9 ? "9+" : unreadCount}
+            </span>
           )}
         </button>
       </PopoverTrigger>
@@ -179,7 +181,12 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { theme, toggleTheme = () => {} } = useTheme();
   const [currentPath] = useLocation();
   const { data: notifications } = trpc.notifications.list.useQuery(undefined, { refetchInterval: 15000, refetchOnWindowFocus: true });
-  const unreadCount = notifications?.filter((n) => !n.isRead).length ?? 0;
+  const unread = notifications?.filter((n) => !n.isRead) ?? [];
+  const countByTypes = (types: string[]) => unread.filter((n) => types.includes(n.type ?? "")).length;
+  // Per-section unread counts for the nav badges.
+  const inboxCount = countByTypes(["escalation", "new_conversation", "new_message"]);
+  const ticketsCount = countByTypes(["new_ticket", "ticket_reply"]);
+  const supportCount = countByTypes(["support_reply"]);
   const utils = trpc.useUtils();
   const { data: workspace } = trpc.workspace.get.useQuery();
   const { data: usage } = trpc.billing.usage.useQuery();
@@ -229,7 +236,12 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
             <NavItem
               key={item.href}
               {...item}
-              badge={item.href === "/inbox" ? unreadCount : undefined}
+              badge={
+                item.href === "/inbox" ? inboxCount :
+                item.href === "/tickets" ? ticketsCount :
+                item.href === "/support" ? supportCount :
+                undefined
+              }
             />
           ))}
         </div>
