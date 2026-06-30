@@ -327,6 +327,13 @@ const WIDGET_JS = `(function(){
   // shown as a short bot line above the button.
   function addTicketOffer(text){
     if (text){ addMsg("bot", text); }
+    // Keep only one inline ticket button at a time — remove any earlier one so
+    // repeated handoffs don't stack several buttons; the newest sits under the
+    // most recent message.
+    try {
+      var old = body.querySelectorAll(".cbp-offer-btn");
+      for (var k = 0; k < old.length; k++){ if (old[k].parentNode){ old[k].parentNode.removeChild(old[k]); } }
+    } catch (e) {}
     var b = document.createElement("button");
     b.className = "cbp-offer-btn";
     b.style.background = color;
@@ -551,8 +558,9 @@ const WIDGET_JS = `(function(){
           // No human online right now — show the offline message and offer a
           // ticket, NOT the "connecting you to our team" escalation notice.
           if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", data.offlineMessage || "For this one it's best to open a ticket \u2014 a support specialist will get back to you by email."); }
-          // Give the visitor an easy in-chat button to open the ticket form.
-          if (ticketMode !== "off" && !ticketOffered){ revealTicketButton(); addTicketOffer(null); }
+          // Give the visitor an easy in-chat button to open the ticket form —
+          // shown on each handoff answer, not just the first one.
+          if (ticketMode !== "off"){ revealTicketButton(); addTicketOffer(null); }
         } else {
           // A human will answer from the Inbox; their reply arrives via polling.
           if (!humanNoticeShown){ humanNoticeShown = true; addMsg("bot", notice || "You're connected to our team — someone will reply right here shortly."); }
@@ -569,8 +577,10 @@ const WIDGET_JS = `(function(){
           if (data.humanAvailable === false){
             // The AI's reply already invited them to open a ticket — in the
             // visitor's own language — so just reveal the button, without adding
-            // a separate (English) banner on top of it.
-            if (!ticketOffered && !humanReplied){ revealTicketButton(); addTicketOffer(null); }
+            // a separate (English) banner on top of it. Show it on EVERY handoff
+            // answer (not only the first) so the button is always right under the
+            // relevant message; only skip if a human has taken over the chat.
+            if (!humanReplied){ revealTicketButton(); addTicketOffer(null); }
           }
           else { scheduleTicketOffer(); }
         }
