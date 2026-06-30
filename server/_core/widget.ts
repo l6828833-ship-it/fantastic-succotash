@@ -1125,7 +1125,7 @@ export function registerWidgetRoutes(app: Express) {
         "In those cases, don't invent an answer. " +
         (canReachHuman
           ? "Reply briefly, IN THE VISITOR'S OWN LANGUAGE, that you're connecting them to a teammate now, then output the marker [[HANDOFF]] on the very last line by itself."
-          : "Reply briefly, IN THE VISITOR'S OWN LANGUAGE, that you'll open a support ticket so the team can follow up by email. Do NOT claim a human is available or has joined, and do NOT say 'please wait', 'one moment', or 'hold on'. Then output the marker [[HANDOFF]] on the very last line by itself.");
+          : "Reply briefly, IN THE VISITOR'S OWN LANGUAGE, inviting them to open a support ticket using the button shown just below your message, where they can leave their email so the team can reply by email. Do NOT say that YOU will open, are opening, or have opened the ticket — the visitor opens it themselves by tapping that button. Do NOT claim a human is available or has joined, and do NOT say 'please wait', 'one moment', or 'hold on'. Then output the marker [[HANDOFF]] on the very last line by itself.");
       const systemPrompt = [
         agent.systemPrompt || `You are ${agent.name}, a helpful customer support assistant.`,
         `Tone: ${agent.tone ?? "professional"}.`,
