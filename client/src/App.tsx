@@ -94,7 +94,7 @@ function ChatWidget() {
     if (!show) return;
     // Config must be set before the embed script loads.
     (window as unknown as { ChatBotProConfig?: unknown }).ChatBotProConfig = {
-      agentId: "12",
+      agentId: "116cbd55b3de9378922f4e36710c2cd2",
       apiBase: "https://chatrico.com/api",
     };
     if (!document.getElementById("chatrico-embed")) {
