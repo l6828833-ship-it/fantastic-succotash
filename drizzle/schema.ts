@@ -91,6 +91,10 @@ export type Workspace = typeof workspaces.$inferSelect;
 export const agents = pgTable("agents", {
   id: serial("id").primaryKey(),
   workspaceId: integer("workspaceId").notNull(),
+  // Public, unguessable identifier used in the embed code / widget API instead
+  // of the sequential numeric id, so agents can't be discovered or hijacked by
+  // guessing simple numbers. Generated on create; backfilled for old rows.
+  publicId: varchar("publicId", { length: 32 }),
   name: varchar("name", { length: 255 }).notNull(),
   avatarUrl: text("avatarUrl"),
   tone: text("tone").$type<"formal" | "friendly" | "professional" | "casual" | "empathetic">().default("professional"),

@@ -1,6 +1,7 @@
 import { and, desc, eq, gte, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
+import { randomBytes } from "node:crypto";
 import { readFileSync } from "fs";
 import path from "path";
 import {
@@ -269,10 +270,23 @@ export async function getAgentById(id: number) {
   return result[0];
 }
 
+// Generate an unguessable public token for an agent (used in the embed/widget).
+export function newAgentPublicId(): string {
+  return randomBytes(16).toString("hex"); // 32 hex chars
+}
+
+// Look up an agent by its public token (the id used in the embed code).
+export async function getAgentByPublicId(publicId: string) {
+  const db = await getDb();
+  if (!db || !publicId) return undefined;
+  const result = await db.select().from(agents).where(eq(agents.publicId, publicId)).limit(1);
+  return result[0];
+}
+
 export async function createAgent(data: typeof agents.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const [row] = await db.insert(agents).values(data).returning();
+  const [row] = await db.insert(agents).values({ ...data, publicId: data.publicId ?? newAgentPublicId() }).returning();
   return row;
 }
 

@@ -32,7 +32,7 @@ export default function EmbedCode() {
      and applied automatically — no need to edit or re-copy this snippet. -->
 <script>
   window.ChatBotProConfig = {
-    agentId: "${selectedAgent.id}",
+    agentId: "${selectedAgent.publicId ?? selectedAgent.id}",
     apiBase: "${origin}/api",
   };
 </script>
@@ -51,7 +51,7 @@ export default function App() {
     <>
       {/* Your app content */}
       {/* Appearance is managed in Agent Settings and applied automatically. */}
-      <ChatBotProWidget agentId="${selectedAgent.id}" />
+      <ChatBotProWidget agentId="${selectedAgent.publicId ?? selectedAgent.id}" />
     </>
   );
 }`
@@ -65,7 +65,7 @@ function chatbotpro_widget() {
     ?>
     <script>
       window.ChatBotProConfig = {
-        agentId: "<?php echo esc_js('${selectedAgent.id}'); ?>",
+        agentId: "<?php echo esc_js('${selectedAgent.publicId ?? selectedAgent.id}'); ?>",
         apiBase: "${origin}/api",
       };
     </script>

@@ -593,7 +593,20 @@ function shouldEscalate(message: string, userMessageCount: number, triggers: str
   return false;
 }
 
-export function registerWidgetRoutes(app: Express) {  // The widget loader script.
+// Resolve a public widget identifier to an agent. New embeds use the agent's
+// unguessable publicId token; we still accept the legacy numeric id so existing
+// installs keep working.
+async function resolveWidgetAgent(idParam: unknown) {
+  const s = String(idParam ?? "").trim();
+  if (!s) return undefined;
+  const byToken = await db.getAgentByPublicId(s);
+  if (byToken) return byToken;
+  if (/^\d+$/.test(s)) return db.getAgentById(Number(s));
+  return undefined;
+}
+
+export function registerWidgetRoutes(app: Express) {
+  // The widget loader script.
   app.get("/widget/embed.js", (_req: Request, res: Response) => {
     setCors(res);
     res.type("application/javascript");
@@ -605,7 +618,7 @@ export function registerWidgetRoutes(app: Express) {  // The widget loader scrip
   app.get("/api/widget/agent/:id", async (req: Request, res: Response) => {
     setCors(res);
     try {
-      const agent = await db.getAgentById(Number(req.params.id));
+      const agent = await resolveWidgetAgent(req.params.id);
       if (!agent) {
         res.status(404).json({ error: "Agent not found" });
         return;
@@ -614,7 +627,7 @@ export function registerWidgetRoutes(app: Express) {  // The widget loader scrip
       // can only use the default chat icon; premium icons need a paid plan).
       const workspace = await db.getWorkspaceById(agent.workspaceId);
       res.json({
-        id: agent.id,
+        id: agent.publicId ?? String(agent.id),
         name: agent.name,
         welcomeMessage: agent.welcomeMessage ?? "Hi! How can I help you today?",
         // Serve the agent's literal saved color so the dashboard color always
@@ -656,17 +669,16 @@ export function registerWidgetRoutes(app: Express) {  // The widget loader scrip
         : null;
     try {
       const body = (req.body ?? {}) as { agentId?: string | number; conversationId?: string | number; name?: string; email?: string };
-      const agentId = Number(body.agentId);
       const name = String(body.name ?? "").trim().slice(0, 200);
       const email = String(body.email ?? "").trim().slice(0, 320);
-      if (!agentId || (!name && !email)) {
-        res.status(400).json({ error: "agentId and at least one of name/email are required" });
-        return;
-      }
 
-      const agent = await db.getAgentById(agentId);
+      const agent = await resolveWidgetAgent(body.agentId);
       if (!agent) {
         res.status(404).json({ error: "Agent not found" });
+        return;
+      }
+      if (!name && !email) {
+        res.status(400).json({ error: "at least one of name/email is required" });
         return;
       }
 
@@ -732,15 +744,14 @@ export function registerWidgetRoutes(app: Express) {  // The widget loader scrip
     setCors(res);
     try {
       const body = (req.body ?? {}) as { agentId?: string | number; conversationId?: string | number; name?: string; email?: string; subject?: string; message?: string };
-      const agentId = Number(body.agentId);
       const subject = String(body.subject ?? "").trim();
       const message = String(body.message ?? "").trim();
       const email = String(body.email ?? "").trim();
-      if (!agentId || !subject || !message) {
+      if (!subject || !message) {
         res.status(400).json({ error: "Subject and message are required." });
         return;
       }
-      const agent = await db.getAgentById(agentId);
+      const agent = await resolveWidgetAgent(body.agentId);
       if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
       if ((agent.ticketMode ?? "off") === "off") { res.status(403).json({ error: "Ticketing is not enabled for this agent." }); return; }
 
@@ -794,14 +805,13 @@ export function registerWidgetRoutes(app: Express) {  // The widget loader scrip
   app.get("/api/widget/messages", async (req: Request, res: Response) => {
     setCors(res);
     try {
-      const agentId = Number(req.query.agentId);
       const conversationId = Number(req.query.conversationId);
       const after = Number(req.query.after) || 0;
-      if (!agentId || !conversationId) {
+      if (!req.query.agentId || !conversationId) {
         res.status(400).json({ messages: [] });
         return;
       }
-      const agent = await db.getAgentById(agentId);
+      const agent = await resolveWidgetAgent(req.query.agentId);
       const conv = await db.getConversationById(conversationId);
       if (!agent || !conv || conv.workspaceId !== agent.workspaceId) {
         res.json({ messages: [] });
@@ -824,14 +834,13 @@ export function registerWidgetRoutes(app: Express) {  // The widget loader scrip
     let conversationId: number | null = null;
     try {
       const body = (req.body ?? {}) as { agentId?: string | number; message?: string; conversationId?: string | number };
-      const agentId = Number(body.agentId);
       const message = String(body.message ?? "").trim().slice(0, 4000);
-      if (!agentId || !message) {
+      if (!message) {
         res.status(400).json({ error: "agentId and message are required" });
         return;
       }
 
-      const agent = await db.getAgentById(agentId);
+      const agent = await resolveWidgetAgent(body.agentId);
       if (!agent) {
         res.status(404).json({ error: "Agent not found" });
         return;
