@@ -1046,7 +1046,7 @@ export function registerWidgetRoutes(app: Express) {
       const systemPrompt = [
         agent.systemPrompt || `You are ${agent.name}, a helpful customer support assistant.`,
         `Tone: ${agent.tone ?? "professional"}.`,
-        `Always respond in ${agent.language ?? "English"}.`,
+        `Language: automatically detect the language the visitor writes in and ALWAYS reply in that same language, matching them naturally (e.g. if they write in Bahasa Indonesia, reply in Bahasa Indonesia; if Arabic, reply in Arabic; if Spanish, reply in Spanish). Switch languages mid-chat if the visitor does. Only if the visitor's language is genuinely unclear, default to ${agent.language ?? "English"}.`,
         "A welcome message has already been shown to the visitor — don't open with another greeting, just help.",
         knowledge ? `Use this knowledge base when relevant:\n${knowledge}` : "",
         handoffDirective,
