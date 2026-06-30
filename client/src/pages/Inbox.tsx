@@ -78,12 +78,18 @@ export default function Inbox() {
   // Opening a conversation marks it read, so it stops counting toward the
   // Inbox unread badge.
   const markRead = trpc.inbox.markRead.useMutation({
-    onSuccess: () => { utils.inbox.openCount.invalidate(); },
+    onSuccess: () => { utils.inbox.openCount.invalidate(); utils.inbox.listConversations.invalidate(); },
   });
   useEffect(() => {
-    if (selectedConvId) markRead.mutate({ conversationId: selectedConvId });
+    if (!selectedConvId) return;
+    // Mark read on open, and keep it read while you're viewing (so a new
+    // message that arrives while the chat is open doesn't re-flag it). Only
+    // fire when it's actually unread to avoid needless writes.
+    const c = conversations?.find((x) => x.id === selectedConvId) as { lastReadAt?: string | null } | undefined;
+    const unread = c ? !c.lastReadAt : true;
+    if (unread) markRead.mutate({ conversationId: selectedConvId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedConvId]);
+  }, [selectedConvId, messages, conversations]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -183,6 +189,7 @@ export default function Inbox() {
           ) : (
             conversations.map((conv) => {
               const status = STATUS_CONFIG[conv.status as keyof typeof STATUS_CONFIG];
+              const isUnread = !(conv as { lastReadAt?: string | null }).lastReadAt;
               return (
                 <button
                   key={conv.id}
@@ -197,7 +204,10 @@ export default function Inbox() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
-                      <p className="text-sm font-medium text-foreground truncate">{conv.visitorName ?? "Visitor"}</p>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {isUnread && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" title="Unread" />}
+                        <p className={cn("text-sm truncate text-foreground", isUnread ? "font-bold" : "font-medium")}>{conv.visitorName ?? "Visitor"}</p>
+                      </div>
                       <span className="text-xs text-muted-foreground shrink-0 ml-2">
                         {new Date(conv.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                       </span>
