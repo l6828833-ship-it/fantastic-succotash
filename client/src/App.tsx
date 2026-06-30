@@ -34,6 +34,18 @@ import { Loader2 } from "lucide-react";
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
+  const utils = trpc.useUtils();
+
+  // Warm the cache for the most-visited pages as soon as the user is known, so
+  // navigating around the app shows data instantly instead of a loading flash.
+  useEffect(() => {
+    if (!user) return;
+    utils.workspace.get.prefetch();
+    utils.agent.list.prefetch();
+    utils.notifications.list.prefetch();
+    utils.billing.usage.prefetch();
+    utils.inbox.listConversations.prefetch({ status: "open" });
+  }, [user, utils]);
 
   if (loading) {
     return (
