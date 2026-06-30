@@ -382,6 +382,12 @@ const knowledgeRouter = router({
 
 // ─── Inbox Router ─────────────────────────────────────────────────────────────
 const inboxRouter = router({
+  // Lightweight count of open conversations for the sidebar Inbox badge.
+  openCount: protectedProcedure.query(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) return 0;
+    return db.countConversationsByStatus(workspace.id, "open");
+  }),
   listConversations: protectedProcedure
     .input(z.object({ status: z.string().optional() }))
     .query(async ({ ctx, input }) => {
@@ -526,6 +532,12 @@ const inboxRouter = router({
 
 // ─── Tickets Router ───────────────────────────────────────────────────────────
 const ticketsRouter = router({
+  // Lightweight count of open tickets for the sidebar Tickets badge.
+  openCount: protectedProcedure.query(async ({ ctx }) => {
+    const workspace = await db.getWorkspaceByUserId(ctx.user.id);
+    if (!workspace) return 0;
+    return db.countTicketsByStatus(workspace.id, "open");
+  }),
   list: protectedProcedure
     .input(z.object({ status: z.string().optional() }))
     .query(async ({ ctx, input }) => {

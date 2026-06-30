@@ -653,6 +653,28 @@ export async function getNotificationsByWorkspace(workspaceId: number, userId?: 
   return db.select().from(notifications).where(and(...conditions)).orderBy(desc(notifications.createdAt)).limit(50);
 }
 
+// Count conversations in a given status (e.g. "open") for the Inbox badge.
+export async function countConversationsByStatus(workspaceId: number, status: string): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(conversations)
+    .where(and(eq(conversations.workspaceId, workspaceId), eq(conversations.status, status as "open" | "pending" | "resolved")));
+  return Number(result[0]?.count ?? 0);
+}
+
+// Count tickets in a given status (e.g. "open") for the Tickets badge.
+export async function countTicketsByStatus(workspaceId: number, status: string): Promise<number> {
+  const db = await getDb();
+  if (!db) return 0;
+  const result = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(tickets)
+    .where(and(eq(tickets.workspaceId, workspaceId), eq(tickets.status, status as "open" | "pending" | "resolved" | "closed")));
+  return Number(result[0]?.count ?? 0);
+}
+
 export async function createNotification(data: typeof notifications.$inferInsert) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
