@@ -353,6 +353,15 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Unread totals for the mobile top bar (these queries are shared/deduped with
+  // the sidebar, so no extra network cost). On mobile the sidebar is hidden, so
+  // without this the user would never see the red unread indicators.
+  const { data: notifications } = trpc.notifications.list.useQuery(undefined, { refetchInterval: 15000, refetchOnWindowFocus: true });
+  const { data: inboxOpen } = trpc.inbox.openCount.useQuery(undefined, { refetchInterval: 15000, refetchOnWindowFocus: true });
+  const { data: ticketsOpen } = trpc.tickets.openCount.useQuery(undefined, { refetchInterval: 15000, refetchOnWindowFocus: true });
+  const notifUnread = notifications?.filter((n) => !n.isRead).length ?? 0;
+  const mobileUnread = notifUnread + (inboxOpen ?? 0) + (ticketsOpen ?? 0);
+
   // Embedded mode (e.g. inside the WordPress plugin iframe): render just the
   // page content with no sidebar/topbar chrome. Triggered by `?embed=1`.
   const isEmbed = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("embed") === "1";
@@ -382,20 +391,24 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile topbar */}
-        <div className="lg:hidden flex items-center gap-3 px-4 h-14 border-b border-border bg-background shrink-0">
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" onClick={() => setMobileOpen(true)}>
-                <Menu className="w-5 h-5" />
-              </Button>
-            </SheetTrigger>
-          </Sheet>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center">
-              <Bot className="w-3 h-3 text-white" />
+        <div className="lg:hidden flex items-center justify-between gap-3 px-4 h-14 border-b border-border bg-background shrink-0">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" className="relative" onClick={() => setMobileOpen(true)}>
+              <Menu className="w-5 h-5" />
+              {mobileUnread > 0 && (
+                <span className="absolute top-1 right-1 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">
+                  {mobileUnread > 9 ? "9+" : mobileUnread}
+                </span>
+              )}
+            </Button>
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md bg-primary flex items-center justify-center">
+                <Bot className="w-3 h-3 text-white" />
+              </div>
+              <span className="font-semibold text-sm">Chatrico</span>
             </div>
-            <span className="font-semibold text-sm">Chatrico</span>
           </div>
+          <NotificationBell />
         </div>
 
         <main className="flex-1 overflow-auto">
