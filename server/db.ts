@@ -676,16 +676,24 @@ export async function getAnalyticsSummary(workspaceId: number) {
   const db = await getDb();
   if (!db) return { total: 0, resolved: 0, escalated: 0, avgCsat: 0 };
 
-  const total = await db.select({ count: sql<number>`count(*)` }).from(conversations).where(eq(conversations.workspaceId, workspaceId));
-  const resolved = await db.select({ count: sql<number>`count(*)` }).from(conversations).where(and(eq(conversations.workspaceId, workspaceId), eq(conversations.status, "resolved")));
-  const escalated = await db.select({ count: sql<number>`count(*)` }).from(conversations).where(and(eq(conversations.workspaceId, workspaceId), eq(conversations.isEscalated, true)));
-  const csatResult = await db.select({ avg: sql<number>`avg(${conversations.csatScore})` }).from(conversations).where(and(eq(conversations.workspaceId, workspaceId)));
+  // Single round-trip with conditional aggregation instead of 4 separate
+  // COUNT queries (each of which was a separate network round-trip).
+  const rows = await db
+    .select({
+      total: sql<number>`count(*)`,
+      resolved: sql<number>`count(*) filter (where ${conversations.status} = 'resolved')`,
+      escalated: sql<number>`count(*) filter (where ${conversations.isEscalated} = true)`,
+      avgCsat: sql<number>`coalesce(avg(${conversations.csatScore}), 0)`,
+    })
+    .from(conversations)
+    .where(eq(conversations.workspaceId, workspaceId));
+  const r = rows[0];
 
   return {
-    total: Number(total[0]?.count ?? 0),
-    resolved: Number(resolved[0]?.count ?? 0),
-    escalated: Number(escalated[0]?.count ?? 0),
-    avgCsat: Number(csatResult[0]?.avg ?? 0),
+    total: Number(r?.total ?? 0),
+    resolved: Number(r?.resolved ?? 0),
+    escalated: Number(r?.escalated ?? 0),
+    avgCsat: Number(r?.avgCsat ?? 0),
   };
 }
 

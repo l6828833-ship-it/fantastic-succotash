@@ -137,7 +137,9 @@ class SDKServer {
       throw ForbiddenError("User not found; please sign in again");
     }
 
-    await db.upsertUser({ openId: user.openId, lastSignedIn: new Date() });
+    // Update "last signed in" in the background — don't block the request on a
+    // write. This shaves a DB round-trip off every authenticated API call.
+    void db.upsertUser({ openId: user.openId, lastSignedIn: new Date() }).catch(() => {});
     return user;
   }
 }
