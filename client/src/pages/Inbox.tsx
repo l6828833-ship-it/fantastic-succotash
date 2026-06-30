@@ -81,9 +81,15 @@ export default function Inbox() {
     onSuccess: () => { utils.inbox.openCount.invalidate(); utils.inbox.listConversations.invalidate(); },
   });
   useEffect(() => {
-    if (selectedConvId) markRead.mutate({ conversationId: selectedConvId });
+    if (!selectedConvId) return;
+    // Mark read on open, and keep it read while you're viewing (so a new
+    // message that arrives while the chat is open doesn't re-flag it). Only
+    // fire when it's actually unread to avoid needless writes.
+    const c = conversations?.find((x) => x.id === selectedConvId) as { lastReadAt?: string | null } | undefined;
+    const unread = c ? !c.lastReadAt : true;
+    if (unread) markRead.mutate({ conversationId: selectedConvId });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedConvId]);
+  }, [selectedConvId, messages, conversations]);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
