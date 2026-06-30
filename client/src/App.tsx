@@ -23,6 +23,7 @@ import AcceptInvite from "./pages/AcceptInvite";
 import { Terms, Privacy, Refund } from "./pages/Legal";
 import TicketPortal from "./pages/TicketPortal";
 import Settings from "./pages/Settings";
+import Billing from "./pages/Billing";
 import Support from "./pages/Support";
 import AppLayout from "./components/AppLayout";
 import { UpgradeProvider } from "./components/UpgradeDialog";
@@ -272,6 +273,15 @@ function Router() {
           <OnboardingGate>
             <AppLayout>
               <Admin />
+            </AppLayout>
+          </OnboardingGate>
+        </AuthGate>
+      )} />
+      <Route path="/billing" component={() => (
+        <AuthGate>
+          <OnboardingGate>
+            <AppLayout>
+              <Billing />
             </AppLayout>
           </OnboardingGate>
         </AuthGate>

@@ -9,6 +9,7 @@ import {
   CheckCheck,
   ChevronDown,
   Code2,
+  CreditCard,
   Gift,
   Inbox,
   LayoutDashboard,
@@ -45,6 +46,7 @@ const navItems = [
   { href: "/tickets", icon: Ticket, label: "Tickets" },
   { href: "/contacts", icon: Users, label: "Contacts" },
   { href: "/analytics", icon: BarChart3, label: "Analytics" },
+  { href: "/billing", icon: CreditCard, label: "Billing & Plans" },
   { href: "/embed", icon: Code2, label: "Embed Code" },
   { href: "/affiliate", icon: Gift, label: "Affiliate" },
   { href: "/support", icon: LifeBuoy, label: "Help & Support" },
@@ -180,6 +182,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   const unreadCount = notifications?.filter((n) => !n.isRead).length ?? 0;
   const utils = trpc.useUtils();
   const { data: workspace } = trpc.workspace.get.useQuery();
+  const { data: usage } = trpc.billing.usage.useQuery();
   const supportOnline = workspace?.supportOnline !== false;
   const setAvailability = trpc.workspace.update.useMutation({
     onSuccess: () => utils.workspace.get.invalidate(),
@@ -234,15 +237,37 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
 
       {/* User footer */}
       <div className="px-3 pb-4 shrink-0 border-t border-sidebar-border pt-3">
-        {/* Plan promo: current plan + upgrade CTA */}
+        {/* Plan promo: AI conversation usage + current plan + upgrade CTA */}
         {(() => {
           const plan = workspace?.plan === "growth" ? "pro" : (workspace?.plan ?? "free");
           const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
           const canUpgrade = !["business", "enterprise"].includes(plan);
+          const conv = usage?.aiConversations;
+          const used = conv?.used ?? 0;
+          const limit = conv?.limit ?? null;
+          const pct = limit && limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+          const near = pct >= 80;
           return (
-            <Link href="/settings?tab=billing">
+            <Link href="/billing">
               <div className="mb-3 rounded-lg border border-sidebar-border bg-sidebar-accent/40 p-3 cursor-pointer hover:bg-sidebar-accent transition-colors" onClick={onClose}>
+                {/* AI conversation usage (top) */}
                 <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-sidebar-foreground/60 flex items-center gap-1">
+                    <MessageSquare className="w-3 h-3 shrink-0" /> AI conversations
+                  </span>
+                  <span className="text-[10px] font-medium text-sidebar-foreground/80">
+                    {used.toLocaleString()}{limit != null ? ` / ${limit.toLocaleString()}` : ""}
+                  </span>
+                </div>
+                {limit != null ? (
+                  <div className="mt-1.5 h-1.5 w-full rounded-full bg-sidebar-border/60 overflow-hidden">
+                    <div className={cn("h-full rounded-full", near ? "bg-amber-500" : "bg-sidebar-primary")} style={{ width: `${pct}%` }} />
+                  </div>
+                ) : (
+                  <div className="mt-1.5 h-1.5 w-full rounded-full bg-emerald-500/20" />
+                )}
+                {/* Current plan */}
+                <div className="flex items-center justify-between gap-2 mt-3">
                   <span className="text-xs text-sidebar-foreground/60">Current plan</span>
                   <Badge className="text-[10px] bg-sidebar-primary text-sidebar-primary-foreground capitalize">{planLabel}</Badge>
                 </div>
