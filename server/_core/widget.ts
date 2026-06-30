@@ -1049,6 +1049,15 @@ export function registerWidgetRoutes(app: Express) {
       // ticket immediately (don't make the visitor wait for someone who can't come).
       const effectiveHumanAvailable = agent.handoffMode === "ai_only" ? false : humanAvailable;
 
+      // In AI-only mode there is no human to join, so never promise one. Replace a
+      // handoff reply with clear, ticket-oriented wording.
+      if (wantsHandoff && agent.handoffMode === "ai_only") {
+        const ticketOn = (agent.ticketMode ?? "off") !== "off";
+        reply = ticketOn
+          ? "That's something our team handles directly. Tap \u201cOpen a ticket\u201d below and we'll get back to you by email as soon as we can. \uD83D\uDE0A"
+          : (agent.fallbackMessage || "That's something our team handles directly \u2014 please reach out to our support team and we'll help you out.");
+      }
+
       const agentMsg = await db.createMessage({ conversationId, role: "agent", content: reply });
 
       // `fallback` is true when the AI couldn't resolve it on its own; the widget
