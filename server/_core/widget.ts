@@ -1002,12 +1002,22 @@ export function registerWidgetRoutes(app: Express) {
 
       // Did the AI signal it can't handle this on its own?
       const HANDOFF_RE = /\[\[\s*handoff\s*\]\]/gi;
-      const needsHandoff = HANDOFF_RE.test(llmContent);
+      const markerHandoff = /\[\[\s*handoff\s*\]\]/i.test(llmContent);
       let reply = (llmContent || agent.fallbackMessage || "I'm sorry, I couldn't process that right now.")
         .replace(HANDOFF_RE, "")
         .trim();
       if (!reply) reply = agent.fallbackMessage || "Let me pass this to our team so they can help.";
-      // Offer a ticket / escalate whenever the AI flagged a handoff or returned nothing.
+
+      // Safety net: models don't always emit the marker (especially when a
+      // custom prompt tells them to "connect you with our team"). So also treat
+      // it as a handoff when the visitor clearly needs a human/action, or when
+      // the AI's own reply is trying to hand off. This guarantees a ticket is
+      // offered instead of an empty "a human will join" promise.
+      const msgLower = String(message).toLowerCase();
+      const TOPIC_HANDOFF_RE = /\b(refund|charge ?back|charge-back|reimburse|money back|cancel|cancellation|billing|invoice|dispute|complaint|speak (to|with) (a |an )?(human|person|someone|agent|representative|team)|talk (to|with) (a |an )?(human|person|someone|agent|representative|team)|live (agent|person|chat)|real (human|person)|human (agent|support|please))\b/i;
+      const REPLY_HANDOFF_RE = /(connect(ing)? you|get you in touch|in touch with (our|the)|reach out to (our|the)|someone (on|from) (our|the) team|member of (our|the) team|our (support )?team can|pass (this|it) (on |along )?to|set this up|connect you with)/i;
+      const needsHandoff = markerHandoff || TOPIC_HANDOFF_RE.test(msgLower) || REPLY_HANDOFF_RE.test(llmContent);
+      // Offer a ticket / escalate whenever a handoff is needed or nothing came back.
       const wantsHandoff = needsHandoff || !llmContent;
 
       // In "AI first → human escalation" mode, a flagged handoff should actually
