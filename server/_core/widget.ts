@@ -12,13 +12,24 @@ function setCors(res: Response) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
-// Remembers chat POSTs we've recently started processing, keyed by
-// conversationId + message text. Browsers/proxies/extensions sometimes fire the
-// exact same chat request twice (e.g. a retry of a slow LLM call). Without a
-// guard each copy generates its OWN, different AI reply and the duplicate leaks
-// in through the poll loop, so the bot looks like it "answers twice". This lets
-// a duplicate wait for the first reply instead of generating a second one.
-const recentWidgetChats = new Map<string, number>();
+// Remembers chat POSTs we've recently answered, keyed by conversationId +
+// message text. Browsers/proxies/extensions sometimes fire the exact same chat
+// request twice (e.g. a retry of a slow LLM call). Without a guard each copy
+// generates its OWN, different AI reply and the duplicate leaks in through the
+// poll loop, so the bot looks like it "answers twice". We cache the FULL
+// response (including the ticket/handoff flag) so a duplicate replays it exactly
+// instead of generating a second reply.
+type WidgetReplyMeta = {
+  reply: string;
+  messageId: number | null;
+  userMessageId: number | null;
+  fallback: boolean;
+  humanAvailable: boolean;
+  mode: string;
+  ts: number;
+  pending: boolean;
+};
+const recentWidgetChats = new Map<string, WidgetReplyMeta>();
 
 // Vanilla JS widget served at /widget/embed.js. Kept dependency-free and
 // namespaced (cbp-) so it never clashes with the host page. No template
@@ -992,48 +1003,32 @@ export function registerWidgetRoutes(app: Express) {
       }
 
       // ── Duplicate-request guard ───────────────────────────────────────────
-      // Collapse duplicate/retried copies of the same chat POST so the bot never
-      // generates (and shows) two replies for one visitor message.
+      // If we already answered this exact message moments ago, replay that FULL
+      // response — including the ticket/handoff flag — so a repeat question still
+      // shows the ticket button (and we never generate a second, different reply).
       const dupeKey = conversationId + "|" + message;
-      const findExistingReply = async () => {
-        const msgs = await db.getMessagesByConversation(conversationId!);
-        for (let i = msgs.length - 1; i >= 0; i--) {
-          const m = msgs[i];
-          if (m.role !== "user" || String(m.content ?? "").trim() !== message) continue;
-          const t = (m as { createdAt?: string | Date }).createdAt
-            ? new Date((m as { createdAt?: string | Date }).createdAt as string | Date).getTime()
-            : 0;
-          if (t && Date.now() - t > 30000) return null; // too old to be a retry
-          const rep = msgs.slice(i + 1).find((x) => x.role === "agent");
-          return rep ? { userId: m.id, rep } : null;
-        }
-        return null;
-      };
-      // (a) Identical message already answered moments ago → return that reply.
-      {
-        const existing = await findExistingReply();
-        if (existing) {
-          res.json({ reply: existing.rep.content, conversationId, mode: "ai", userMessageId: existing.userId, messageId: existing.rep.id, fallback: false, duplicate: true });
+      const nowTs = Date.now();
+      const cached = recentWidgetChats.get(dupeKey);
+      if (cached && nowTs - cached.ts < 15000) {
+        if (!cached.pending) {
+          res.json({ reply: cached.reply, conversationId, mode: cached.mode, userMessageId: cached.userMessageId, messageId: cached.messageId, fallback: cached.fallback, humanAvailable: cached.humanAvailable, duplicate: true });
           return;
         }
-      }
-      // (b) A copy is still being processed → wait briefly for its reply instead
-      //     of generating a second one.
-      const seenAt = recentWidgetChats.get(dupeKey);
-      const nowTs = Date.now();
-      if (seenAt && nowTs - seenAt < 30000) {
-        for (let attempt = 0; attempt < 8; attempt++) {
+        // A copy is still being processed — wait for it to finish, then replay.
+        for (let attempt = 0; attempt < 10; attempt++) {
           await new Promise((r) => setTimeout(r, 900));
-          const existing = await findExistingReply();
-          if (existing) {
-            res.json({ reply: existing.rep.content, conversationId, mode: "ai", userMessageId: existing.userId, messageId: existing.rep.id, fallback: false, duplicate: true });
+          const done = recentWidgetChats.get(dupeKey);
+          if (done && !done.pending) {
+            res.json({ reply: done.reply, conversationId, mode: done.mode, userMessageId: done.userMessageId, messageId: done.messageId, fallback: done.fallback, humanAvailable: done.humanAvailable, duplicate: true });
             return;
           }
         }
+        // Still not done after waiting — fall through and generate a fresh reply.
       }
-      recentWidgetChats.set(dupeKey, nowTs);
+      // Mark this message as being processed so a concurrent duplicate waits.
+      recentWidgetChats.set(dupeKey, { reply: "", messageId: null, userMessageId: null, fallback: false, humanAvailable: false, mode: "ai", ts: nowTs, pending: true });
       if (recentWidgetChats.size > 1000) {
-        for (const [k, v] of recentWidgetChats) { if (nowTs - v > 120000) recentWidgetChats.delete(k); }
+        for (const [k, v] of recentWidgetChats) { if (nowTs - v.ts > 120000) recentWidgetChats.delete(k); }
       }
 
       const userMsg = await db.createMessage({ conversationId, role: "user", content: message });
@@ -1218,6 +1213,11 @@ export function registerWidgetRoutes(app: Express) {
       }
 
       const agentMsg = await db.createMessage({ conversationId, role: "agent", content: reply });
+
+      // Cache the full response so a duplicate/retried request replays it exactly
+      // (including `fallback`, so the ticket button still shows) instead of
+      // generating a second, different reply.
+      recentWidgetChats.set(dupeKey, { reply, messageId: agentMsg?.id ?? null, userMessageId, fallback: wantsHandoff, humanAvailable: effectiveHumanAvailable, mode: "ai", ts: Date.now(), pending: false });
 
       // `fallback` is true when the AI couldn't resolve it on its own; the widget
       // uses it (with the ticket settings) to offer a support ticket.
